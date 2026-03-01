@@ -30,7 +30,10 @@ public final class Referrals: Sendable {
     /// - Parameter code: The referral code.
     /// - Returns: The referral details.
     public func get(code: String) async throws -> ReferralDetails {
-        guard let encodedCode = code.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+        // Use urlPathAllowed minus characters that would break path routing (/, +, =, &, #, %)
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/+=#&?")
+        guard let encodedCode = code.addingPercentEncoding(withAllowedCharacters: allowed) else {
             throw TolinkuError.invalidURL("Could not URL-encode referral code: \(code)")
         }
         return try await client.get(path: "/v1/api/referral/\(encodedCode)")

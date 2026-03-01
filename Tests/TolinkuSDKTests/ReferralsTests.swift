@@ -42,10 +42,10 @@ final class ReferralsTests: XCTestCase {
 
     func testReferralCodeWithSpaces() async throws {
         MockURLProtocol.requestHandler = { request in
-            // Verify the URL path is correctly encoded
-            let path = request.url?.path ?? ""
-            XCTAssertTrue(path.contains("hello%20world") || path.contains("hello+world"),
-                          "Expected URL-encoded space in path, got: \(path)")
+            // Verify the URL string contains the encoded space (URL.path decodes percent-encoding)
+            let urlString = request.url?.absoluteString ?? ""
+            XCTAssertTrue(urlString.contains("hello%20world"),
+                          "Expected URL-encoded space in URL, got: \(urlString)")
 
             let response = HTTPURLResponse(
                 url: request.url!,

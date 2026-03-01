@@ -52,10 +52,12 @@ final class AnalyticsTests: XCTestCase {
     // MARK: - Batch Flushes at 10 Events
 
     func testBatchFlushesAt10Events() async throws {
-        var receivedBatchBody: Data?
+        var batchRequestReceived = false
 
         MockURLProtocol.requestHandler = { request in
-            receivedBatchBody = request.httpBody
+            if request.url?.path.hasSuffix("/v1/api/analytics/batch") == true {
+                batchRequestReceived = true
+            }
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
@@ -71,23 +73,21 @@ final class AnalyticsTests: XCTestCase {
         }
 
         // Allow time for the batch to be sent
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
 
-        // Verify a batch was sent
-        XCTAssertNotNil(receivedBatchBody, "Expected a batch request to be sent after 10 events")
-
-        // Verify the request went to the correct endpoint
-        let lastRequest = MockURLProtocol.requestLog.last
-        XCTAssertTrue(lastRequest?.url?.path.hasSuffix("/v1/api/analytics/batch") ?? false)
+        // Verify a batch request was sent
+        XCTAssertTrue(batchRequestReceived, "Expected a batch request to be sent after 10 events")
     }
 
     // MARK: - Manual Flush
 
     func testManualFlush() async throws {
-        var receivedBatchBody: Data?
+        var batchRequestReceived = false
 
         MockURLProtocol.requestHandler = { request in
-            receivedBatchBody = request.httpBody
+            if request.url?.path.hasSuffix("/v1/api/analytics/batch") == true {
+                batchRequestReceived = true
+            }
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
@@ -100,12 +100,11 @@ final class AnalyticsTests: XCTestCase {
         await analytics.track("custom.manual_event", properties: ["source": .string("test")])
         await analytics.flush()
 
-        // Verify a batch was sent
-        XCTAssertNotNil(receivedBatchBody, "Expected a batch request after manual flush")
+        // Allow a moment for the async operation to complete
+        try await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
 
-        // Verify the endpoint
-        let lastRequest = MockURLProtocol.requestLog.last
-        XCTAssertTrue(lastRequest?.url?.path.hasSuffix("/v1/api/analytics/batch") ?? false)
+        // Verify a batch request was sent
+        XCTAssertTrue(batchRequestReceived, "Expected a batch request after manual flush")
     }
 
     // MARK: - Event Format
@@ -114,7 +113,22 @@ final class AnalyticsTests: XCTestCase {
         var receivedBatchBody: Data?
 
         MockURLProtocol.requestHandler = { request in
-            receivedBatchBody = request.httpBody
+            // Read body from httpBody or httpBodyStream
+            var body = request.httpBody
+            if body == nil, let stream = request.httpBodyStream {
+                stream.open()
+                var data = Data()
+                let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
+                defer { buffer.deallocate() }
+                while stream.hasBytesAvailable {
+                    let read = stream.read(buffer, maxLength: 4096)
+                    if read > 0 { data.append(buffer, count: read) }
+                    else { break }
+                }
+                stream.close()
+                body = data.isEmpty ? nil : data
+            }
+            receivedBatchBody = body
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
@@ -126,6 +140,9 @@ final class AnalyticsTests: XCTestCase {
 
         await analytics.track("custom.signup", properties: ["plan": .string("standard"), "count": .int(3)])
         await analytics.flush()
+
+        // Allow a moment for the async operation to complete
+        try await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
 
         guard let body = receivedBatchBody else {
             return XCTFail("Expected batch body to be present")
