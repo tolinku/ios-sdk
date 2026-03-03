@@ -166,7 +166,18 @@ public final class Analytics: Sendable {
     ///   - eventType: The event name. Should follow the "custom.xxx" convention.
     ///   - properties: Optional dictionary of additional properties to attach to the event.
     public func track(_ eventType: String, properties: [String: AnyCodableValue]? = nil) async {
-        await eventQueue.enqueue(eventType: eventType, properties: properties)
+        var normalizedType = eventType
+        if !normalizedType.hasPrefix("custom.") {
+            normalizedType = "custom.\(normalizedType)"
+        }
+
+        let pattern = #"^custom\.[a-z0-9_]+$"#
+        guard normalizedType.range(of: pattern, options: .regularExpression) != nil else {
+            assertionFailure("Tolinku: event type \"\(normalizedType)\" is invalid. Must match pattern \"custom.[a-z0-9_]+\"")
+            return
+        }
+
+        await eventQueue.enqueue(eventType: normalizedType, properties: properties)
     }
 
     /// Flush all queued events to the server immediately.
