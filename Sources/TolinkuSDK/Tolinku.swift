@@ -57,6 +57,9 @@ public final class Tolinku: Sendable {
     /// Analytics tracking (custom events).
     public let analytics: Analytics
 
+    /// Ecommerce tracking (purchases, carts, products, revenue).
+    public let ecommerce: Ecommerce
+
     /// Referral management (create, complete, milestones, leaderboard, rewards).
     public let referrals: Referrals
 
@@ -71,6 +74,7 @@ public final class Tolinku: Sendable {
     private init(client: Client) {
         self.client = client
         self.analytics = Analytics(client: client)
+        self.ecommerce = Ecommerce(client: client, getUserId: { [weak self] in self?.userId })
         self.referrals = Referrals(client: client)
         self.deferred = DeferredDeepLink(client: client)
         self.messages = Messages(client: client)
@@ -175,10 +179,10 @@ public final class Tolinku: Sendable {
         await analytics.track(eventType, properties: mergedProperties)
     }
 
-    /// Flush all queued analytics events to the server immediately.
-    /// Shorthand for ``analytics.flush()``.
+    /// Flush all queued analytics and ecommerce events to the server immediately.
     public func flush() async {
         await analytics.flush()
+        await ecommerce.flush()
     }
 
     // MARK: - Private Helpers
@@ -207,7 +211,8 @@ public final class Tolinku: Sendable {
 
         guard let instance else { return }
 
-        // Tear down analytics (flush events, cancel timer, remove observers)
+        // Tear down analytics + ecommerce (flush events, cancel timers, remove observers)
         await instance.analytics.shutdown()
+        await instance.ecommerce.shutdown()
     }
 }
