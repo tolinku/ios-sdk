@@ -8,7 +8,7 @@ import os.log
 public final class Tolinku: Sendable {
 
     /// The current SDK version string.
-    public static let sdkVersion = "1.0.0"
+    public static let sdkVersion = "0.3.0"
 
     // MARK: - Singleton
 

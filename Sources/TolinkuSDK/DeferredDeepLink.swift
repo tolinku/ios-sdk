@@ -44,12 +44,27 @@ public final class DeferredDeepLink: Sendable {
     public func claimBySignals(appspaceId: String) async throws -> DeferredDeepLinkResponse? {
         let timezone = TimeZone.current.identifier
 
-        let language: String
-        if #available(iOS 16, *) {
-            language = Locale.current.language.languageCode?.identifier ?? "en"
-        } else {
-            language = Locale.current.languageCode ?? "en"
-        }
+        // Must be a full BCP-47 tag with region ("ko-KR"), because the value this
+        // is matched against is the landing page's `navigator.language`, which
+        // always carries one. Sending the bare primary subtag ("ko") meant the
+        // language signal could never score, capping every iOS match.
+        let language: String = {
+            if let preferred = Locale.preferredLanguages.first, !preferred.isEmpty {
+                return preferred
+            }
+            if #available(iOS 16, *) {
+                let code = Locale.current.language.languageCode?.identifier ?? "en"
+                if let region = Locale.current.region?.identifier {
+                    return "\(code)-\(region)"
+                }
+                return code
+            }
+            let code = Locale.current.languageCode ?? "en"
+            if let region = Locale.current.regionCode {
+                return "\(code)-\(region)"
+            }
+            return code
+        }()
 
         let screenWidth: Int
         let screenHeight: Int
@@ -74,12 +89,26 @@ public final class DeferredDeepLink: Sendable {
         screenHeight = 0
         #endif
 
+        // Pixel ratio separates models that report the same logical size, and the
+        // OS version is compared on its major component only.
+        var pixelRatio: Double = 0
+        #if canImport(UIKit)
+        pixelRatio = await MainActor.run { Double(UIScreen.main.scale) }
+        #endif
+
+        var osVersion = ""
+        #if canImport(UIKit)
+        osVersion = await MainActor.run { UIDevice.current.systemVersion }
+        #endif
+
         let body = ClaimBySignalsRequest(
             appspaceId: appspaceId,
             timezone: timezone,
             language: language,
             screenWidth: screenWidth,
-            screenHeight: screenHeight
+            screenHeight: screenHeight,
+            devicePixelRatio: pixelRatio > 0 ? pixelRatio : nil,
+            osVersion: osVersion.isEmpty ? nil : osVersion
         )
 
         do {

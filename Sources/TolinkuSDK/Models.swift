@@ -330,6 +330,8 @@ public struct ClaimBySignalsRequest: Codable, Sendable {
     public let language: String
     public let screenWidth: Int
     public let screenHeight: Int
+    public let devicePixelRatio: Double?
+    public let osVersion: String?
 
     enum CodingKeys: String, CodingKey {
         case appspaceId = "appspace_id"
@@ -337,14 +339,26 @@ public struct ClaimBySignalsRequest: Codable, Sendable {
         case language
         case screenWidth = "screen_width"
         case screenHeight = "screen_height"
+        case devicePixelRatio = "device_pixel_ratio"
+        case osVersion = "os_version"
     }
 
-    public init(appspaceId: String, timezone: String, language: String, screenWidth: Int, screenHeight: Int) {
+    public init(
+        appspaceId: String,
+        timezone: String,
+        language: String,
+        screenWidth: Int,
+        screenHeight: Int,
+        devicePixelRatio: Double? = nil,
+        osVersion: String? = nil
+    ) {
         self.appspaceId = appspaceId
         self.timezone = timezone
         self.language = language
         self.screenWidth = screenWidth
         self.screenHeight = screenHeight
+        self.devicePixelRatio = devicePixelRatio
+        self.osVersion = osVersion
     }
 }
 

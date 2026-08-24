@@ -122,11 +122,16 @@ if let link = try await deferred.claimByToken("abc123") {
     print(link.deepLinkPath) // e.g. "/merchant/xyz"
 }
 
-// Claim by device signal matching (auto-collects timezone, language, screen size)
-if let link = try await deferred.claimBySignals(appspaceId: "your_appspace_id") {
+// Claim by device signal matching. Timezone, language, screen size, pixel ratio and
+// OS version are collected for you.
+if let link = try await deferred.claimBySignals(appspaceId: "64f0a1b2c3d4e5f60718") {
     navigateTo(link.deepLinkPath)
 }
 ```
+
+`appspaceId` is your Appspace ID, not your subdomain or slug. Copy it from the dashboard
+under **Integrate** or **Settings**. It looks like `64f0a1b2c3d4e5f60718`.
+
 
 ### Universal Link Handling
 
