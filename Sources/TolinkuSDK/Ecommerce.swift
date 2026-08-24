@@ -284,12 +284,23 @@ public final class Ecommerce: Sendable {
     }
 
     public func addToCart(items: [TolinkuItem], cartId: String? = nil) async {
-        let resolvedCartId = cartId ?? await cartIdManager.getOrCreate()
+        // `await` cannot sit to the right of `??`, so the fallback is spelled out.
+        let resolvedCartId: String
+        if let cartId {
+            resolvedCartId = cartId
+        } else {
+            resolvedCartId = await cartIdManager.getOrCreate()
+        }
         await queue.enqueue(QueuedEcomEvent(eventType: "add_to_cart", cartId: resolvedCartId, items: items))
     }
 
     public func removeFromCart(items: [TolinkuItem], cartId: String? = nil) async {
-        let resolvedCartId = cartId ?? await cartIdManager.get()
+        let resolvedCartId: String?
+        if let cartId {
+            resolvedCartId = cartId
+        } else {
+            resolvedCartId = await cartIdManager.get()
+        }
         await queue.enqueue(QueuedEcomEvent(eventType: "remove_from_cart", cartId: resolvedCartId, items: items))
     }
 
@@ -303,17 +314,32 @@ public final class Ecommerce: Sendable {
     }
 
     public func addPaymentInfo(cartId: String? = nil) async {
-        let resolvedCartId = cartId ?? await cartIdManager.get()
+        let resolvedCartId: String?
+        if let cartId {
+            resolvedCartId = cartId
+        } else {
+            resolvedCartId = await cartIdManager.get()
+        }
         await queue.enqueue(QueuedEcomEvent(eventType: "add_payment_info", cartId: resolvedCartId))
     }
 
     public func beginCheckout(revenue: Decimal? = nil, currency: String? = nil, cartId: String? = nil, items: [TolinkuItem]? = nil) async {
-        let resolvedCartId = cartId ?? await cartIdManager.get()
+        let resolvedCartId: String?
+        if let cartId {
+            resolvedCartId = cartId
+        } else {
+            resolvedCartId = await cartIdManager.get()
+        }
         await queue.enqueue(QueuedEcomEvent(eventType: "begin_checkout", revenue: revenue, currency: currency, cartId: resolvedCartId, items: items))
     }
 
     public func purchase(transactionId: String, revenue: Decimal, currency: String, items: [TolinkuItem]? = nil, cartId: String? = nil, couponCode: String? = nil, discount: Decimal? = nil, shipping: Decimal? = nil, tax: Decimal? = nil) async {
-        let resolvedCartId = cartId ?? await cartIdManager.get()
+        let resolvedCartId: String?
+        if let cartId {
+            resolvedCartId = cartId
+        } else {
+            resolvedCartId = await cartIdManager.get()
+        }
         await queue.enqueue(QueuedEcomEvent(
             eventType: "purchase",
             transactionId: transactionId,

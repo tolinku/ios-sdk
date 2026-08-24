@@ -44,14 +44,17 @@ public final class Tolinku: Sendable {
 
     /// The current user ID, used for segment targeting and analytics attribution.
     /// Set via ``setUserId(_:)`` and cleared by passing nil.
-    private let _userIdLock = NSLock()
-    private nonisolated(unsafe) var _userId: String?
+    ///
+    /// Held in a separate box rather than directly on this class so the ecommerce
+    /// module can read it through a closure that captures the box instead of
+    /// `self`. Capturing `self` here is not possible: the closure is built while
+    /// the stored properties are still being initialised, and Swift rejects any
+    /// use of `self` until that finishes.
+    private let _userIdBox: UserIdBox
 
     /// The current user ID, or nil if not set.
     public var userId: String? {
-        _userIdLock.lock()
-        defer { _userIdLock.unlock() }
-        return _userId
+        _userIdBox.current
     }
 
     /// Analytics tracking (custom events).
@@ -72,9 +75,13 @@ public final class Tolinku: Sendable {
     // MARK: - Initialization
 
     private init(client: Client) {
+        // Created as a local first so the closure below captures the box and not
+        // `self`, which is not yet fully initialised at this point.
+        let userIdBox = UserIdBox()
+        self._userIdBox = userIdBox
         self.client = client
         self.analytics = Analytics(client: client)
-        self.ecommerce = Ecommerce(client: client, getUserId: { [weak self] in self?.userId })
+        self.ecommerce = Ecommerce(client: client, getUserId: { userIdBox.current })
         self.referrals = Referrals(client: client)
         self.deferred = DeferredDeepLink(client: client)
         self.messages = Messages(client: client)
@@ -154,9 +161,7 @@ public final class Tolinku: Sendable {
     ///
     /// - Parameter userId: The unique identifier for the current user.
     public func setUserId(_ userId: String?) {
-        _userIdLock.lock()
-        _userId = userId
-        _userIdLock.unlock()
+        _userIdBox.current = userId
     }
 
     // MARK: - Convenience
@@ -216,3 +221,27 @@ public final class Tolinku: Sendable {
         await instance.ecommerce.shutdown()
     }
 }
+
+/// Thread-safe holder for the current user ID.
+///
+/// Exists so a closure handed to another module can read the user ID without
+/// capturing the `Tolinku` instance, which avoids both a retain cycle and the
+/// use-before-initialisation that capturing `self` during `init` would cause.
+private final class UserIdBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: String?
+
+    var current: String? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return value
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            value = newValue
+        }
+    }
+}
+
