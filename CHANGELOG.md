@@ -22,6 +22,11 @@
   leaves the next launch free to try again rather than spending the install's
   one chance at attribution.
 
+- `destroy()` tears the SDK down. The name every Tolinku SDK uses for this.
+  `shutdown()` does the same thing and still works; it is what this SDK shipped
+  and breaking it would serve nobody. It is meant for deprecation later, once
+  moving off it is a one-line change rather than a surprise.
+
 ### Unchanged
 
 - `claimBySignals(appspaceId:)` behaves exactly as before and is not deprecated.

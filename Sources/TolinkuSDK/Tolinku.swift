@@ -203,11 +203,23 @@ public final class Tolinku: Sendable {
 
     // MARK: - Shutdown
 
+    /// Tears down the SDK and releases all resources.
+    ///
+    /// The name the other Tolinku SDKs use for this. ``shutdown()`` does the
+    /// same thing and still works; it is what this SDK shipped and breaking it
+    /// would serve nobody. It is meant for deprecation later, once moving off it
+    /// is a one-line change rather than a surprise.
+    public static func destroy() async {
+        await shutdown()
+    }
+
     /// Shuts down the SDK and releases all resources.
     ///
     /// This method flushes any remaining analytics events, cancels background tasks,
     /// removes notification observers, and clears the shared instance. After calling
     /// this, you can call ``configure(apiKey:baseURL:)`` again to reinitialize the SDK.
+    ///
+    /// Prefer ``destroy()``, which is the name every Tolinku SDK uses.
     public static func shutdown() async {
         lock.lock()
         let instance = _shared
