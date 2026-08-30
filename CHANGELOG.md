@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+
+- `claimDeferredLink(appspaceId:force:)` recovers the link that led to this
+  install and remembers that it did. There is no Play Install Referrer on iOS,
+  so this is signal matching with the bookkeeping that makes calling it safe,
+  matching the call of the same name on the Android, React Native, Flutter and
+  web SDKs.
+
+  The bookkeeping is the point. A claim is consumed the first time it succeeds,
+  so an app calling `claimBySignals` on every launch asks again after the answer
+  is already spent, and each of those is recorded as a miss. The match rate in
+  the dashboard then falls towards zero while the integration is working
+  correctly, which is close to impossible to diagnose from outside.
+
+  Only a settled answer is remembered. A response of "nothing waiting for this
+  device" counts, because no amount of asking will change it. A thrown error
+  does not, so a bad connection or an `appspaceId` that is about to be corrected
+  leaves the next launch free to try again rather than spending the install's
+  one chance at attribution.
+
+### Unchanged
+
+- `claimBySignals(appspaceId:)` behaves exactly as before and is not deprecated.
+  It asks every time it is called; remembering is what `claimDeferredLink` adds.
+
 ## 0.3.0
 
 ### Fixed

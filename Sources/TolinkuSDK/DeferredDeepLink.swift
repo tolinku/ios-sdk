@@ -34,6 +34,69 @@ public final class DeferredDeepLink: Sendable {
         }
     }
 
+    /// Where a completed claim attempt is remembered.
+    ///
+    /// Same key the React Native, Flutter and web SDKs use, so an app sharing
+    /// code across them reads one name rather than four.
+    /// Internal rather than private so a test can clear it between cases;
+    /// UserDefaults outlives a single test and a leftover value would make the
+    /// second case pass for the wrong reason.
+    static let claimedKey = "tolinku_deferred_claimed"
+
+    /// Recover the link that led to this install, once.
+    ///
+    /// There is no Play Install Referrer on iOS, so this is signal matching with
+    /// the bookkeeping that makes calling it safe. That bookkeeping is the
+    /// point: a claim is consumed the first time it succeeds, so an app calling
+    /// ``claimBySignals(appspaceId:)`` on every launch asks again after the
+    /// answer is already spent, and every one of those asks is recorded as a
+    /// miss. The match rate in the dashboard then falls towards zero while the
+    /// integration is working correctly, which is hard to diagnose from outside.
+    ///
+    /// Call it once on first launch. Calling it again is free after the first.
+    ///
+    /// Named to match the Android, React Native and Flutter SDKs, where the same
+    /// call also tries the install referrer before falling back to signals.
+    ///
+    /// - Parameters:
+    ///   - appspaceId: The Appspace ID to match against.
+    ///   - force: Claim again even if an attempt was already recorded. For tests.
+    /// - Returns: The matched deep link info, or nil if there was no match or an
+    ///   attempt was already made.
+    /// - Throws: ``TolinkuError/invalidConfiguration(_:)`` if `appspaceId` is
+    ///   blank, or whatever ``claimBySignals(appspaceId:)`` throws. A throw
+    ///   leaves the attempt unrecorded, so the next launch is free to try again:
+    ///   losing an install's attribution to one bad connection, or to an
+    ///   `appspaceId` that is about to be corrected, is worse than one extra
+    ///   request.
+    @discardableResult
+    public func claimDeferredLink(
+        appspaceId: String,
+        force: Bool = false
+    ) async throws -> DeferredDeepLinkResponse? {
+        guard !appspaceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw TolinkuError.invalidConfiguration("appspaceId must not be blank for claimDeferredLink")
+        }
+
+        if !force && Self.alreadyAttempted() { return nil }
+
+        // A nil here is the 404 that claimBySignals already turns into "nothing
+        // waiting for this device". That is a real answer and worth remembering.
+        // Anything else throws out of here without recording, which is what
+        // leaves the next launch free to retry.
+        let link = try await claimBySignals(appspaceId: appspaceId)
+        Self.rememberAttempt()
+        return link
+    }
+
+    private static func alreadyAttempted() -> Bool {
+        UserDefaults.standard.string(forKey: claimedKey) != nil
+    }
+
+    private static func rememberAttempt() {
+        UserDefaults.standard.set(ISO8601DateFormatter().string(from: Date()), forKey: claimedKey)
+    }
+
     /// Claim a deferred deep link by matching device signals.
     ///
     /// This automatically collects timezone, language, and screen dimensions
