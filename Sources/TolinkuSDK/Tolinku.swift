@@ -184,6 +184,33 @@ public final class Tolinku: Sendable {
         await analytics.track(eventType, properties: mergedProperties)
     }
 
+    /// Report that a link opened the app, when it opened without the browser.
+    ///
+    /// A Universal Link hands the app the URL directly, so Tolinku is never
+    /// contacted and the tap goes unrecorded. Those taps come from people who
+    /// already have your app, so leaving them out makes a re-engagement campaign
+    /// look like a failure exactly when it worked.
+    ///
+    /// Call it wherever the app receives an incoming link, passing the URL
+    /// unchanged:
+    ///
+    /// ```swift
+    /// func application(_ app: UIApplication, continue userActivity: NSUserActivity, ...) -> Bool {
+    ///     if let url = userActivity.webpageURL {
+    ///         Task { await Tolinku.shared?.trackLinkOpen(url.absoluteString) }
+    ///     }
+    ///     return true
+    /// }
+    /// ```
+    ///
+    /// Only http and https links are reported. A custom scheme means Tolinku's
+    /// own hand-off page opened the app, and that tap is already counted.
+    ///
+    /// Never throws.
+    public func trackLinkOpen(_ url: String) async {
+        await analytics.trackLinkOpen(url, userId: userId)
+    }
+
     /// Flush all queued analytics and ecommerce events to the server immediately.
     public func flush() async {
         await analytics.flush()

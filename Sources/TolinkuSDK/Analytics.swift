@@ -127,6 +127,9 @@ private actor EventQueue {
 public final class Analytics: Sendable {
 
     private let client: Client
+
+    /// Set once the server says this Appspace does not attribute app opens.
+    private let appOpens = AppOpenState()
     private let eventQueue: EventQueue
 
     #if canImport(UIKit)
@@ -165,6 +168,54 @@ public final class Analytics: Sendable {
     /// - Parameters:
     ///   - eventType: The event name. Should follow the "custom.xxx" convention.
     ///   - properties: Optional dictionary of additional properties to attach to the event.
+    /// Report that a link opened the app, when it opened without the browser.
+    ///
+    /// A Universal Link hands the app the URL directly, so Tolinku is never
+    /// contacted and the tap goes unrecorded. Those taps come from people who
+    /// already have the app, so leaving them out makes a re-engagement campaign
+    /// look like a failure exactly when it worked.
+    ///
+    /// Only http and https links are reported. A custom scheme means Tolinku's
+    /// own hand-off page opened the app, and that tap was counted when the page
+    /// was served, so passing one does nothing rather than counting it twice.
+    ///
+    /// Never throws. This runs on the path that routes the user somewhere, and a
+    /// tap that goes unrecorded is not worth interrupting that.
+    public func trackLinkOpen(_ url: String, userId: String? = nil) async {
+        if await appOpens.disabled { return }
+
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let parsed = URL(string: trimmed),
+              let scheme = parsed.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return }
+
+        struct Body: Encodable {
+            let url: String
+            let userId: String?
+            enum CodingKeys: String, CodingKey {
+                case url
+                case userId = "user_id"
+            }
+        }
+        struct Reply: Decodable {
+            let attribute: Bool?
+        }
+
+        do {
+            let reply: Reply = try await client.post(
+                path: "/v1/api/opens",
+                body: Body(url: trimmed, userId: userId),
+                authenticated: false
+            )
+            // Remembering a no means the setting costs one request a launch
+            // rather than one per link.
+            if reply.attribute == false { await appOpens.disable() }
+        } catch {
+            // Deliberately silent.
+        }
+    }
+
     public func track(_ eventType: String, properties: [String: AnyCodableValue]? = nil) async {
         var normalizedType = eventType
         if !normalizedType.hasPrefix("custom.") {
@@ -251,4 +302,11 @@ public final class Analytics: Sendable {
         }
         #endif
     }
+}
+
+/// Whether this Appspace attributes app opens, remembered after the server says
+/// it does not. An actor because `Analytics` is `Sendable` and this is mutable.
+actor AppOpenState {
+    private(set) var disabled = false
+    func disable() { disabled = true }
 }
