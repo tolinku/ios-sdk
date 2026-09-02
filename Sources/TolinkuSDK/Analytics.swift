@@ -190,6 +190,8 @@ public final class Analytics: Sendable {
               let scheme = parsed.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else { return }
 
+        if await appOpens.shouldSkip(trimmed) { return }
+
         struct Body: Encodable {
             let url: String
             let userId: String?
@@ -309,4 +311,23 @@ public final class Analytics: Sendable {
 actor AppOpenState {
     private(set) var disabled = false
     func disable() { disabled = true }
+
+    private var lastUrl: String?
+    private var lastAt: Date?
+    private static let dedupeWindow: TimeInterval = 5
+
+    /// Whether this link was already reported a moment ago.
+    ///
+    /// A cold launch and a resume can both deliver the same tap depending on how
+    /// the app is wired, so an app instrumenting both would otherwise report it
+    /// twice and be billed twice. A genuine second tap of the same link inside
+    /// this window is implausible; a duplicate delivery of one tap is not.
+    func shouldSkip(_ url: String, now: Date = Date()) -> Bool {
+        if lastUrl == url, let at = lastAt, now.timeIntervalSince(at) < Self.dedupeWindow {
+            return true
+        }
+        lastUrl = url
+        lastAt = now
+        return false
+    }
 }
