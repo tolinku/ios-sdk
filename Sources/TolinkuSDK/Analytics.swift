@@ -194,9 +194,14 @@ public final class Analytics: Sendable {
 
         struct Body: Encodable {
             let url: String
+            // The User-Agent names the SDK, not the platform, and the Flutter and
+            // React Native SDKs are the same on both. Without this an app open
+            // lands in a blank bucket on every breakdown.
+            let platform: String
             let userId: String?
             enum CodingKeys: String, CodingKey {
                 case url
+                case platform
                 case userId = "user_id"
             }
         }
@@ -207,7 +212,7 @@ public final class Analytics: Sendable {
         do {
             let reply: Reply = try await client.post(
                 path: "/v1/api/opens",
-                body: Body(url: trimmed, userId: userId),
+                body: Body(url: trimmed, platform: "ios", userId: userId),
                 authenticated: false
             )
             // Remembering a no means the setting costs one request a launch
