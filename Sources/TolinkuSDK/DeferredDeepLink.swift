@@ -190,14 +190,33 @@ public final class DeferredDeepLink: Sendable {
         // better than one inferred here, and passing one must not discard the
         // rest, which is the mistake that makes a partial override worse than
         // none at all.
+        // A blank string and a non-positive number are treated as absent rather
+        // than as an override. They are what an unset configuration value and a
+        // failed lookup look like, and taking them literally would discard a
+        // good value the device reported in favour of one the matcher cannot
+        // use, which is the opposite of what a caller passing them intends.
+        func override(_ value: String?) -> String? {
+            guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !trimmed.isEmpty else { return nil }
+            return trimmed
+        }
+        func override(_ value: Int?) -> Int? {
+            guard let value, value > 0 else { return nil }
+            return value
+        }
+        func override(_ value: Double?) -> Double? {
+            guard let value, value.isFinite, value > 0 else { return nil }
+            return value
+        }
+
         let body = ClaimBySignalsRequest(
             appspaceId: appspaceId,
-            timezone: timezone ?? collectedTimezone,
-            language: language ?? collectedLanguage,
-            screenWidth: screenWidth ?? collectedWidth,
-            screenHeight: screenHeight ?? collectedHeight,
-            devicePixelRatio: devicePixelRatio ?? (pixelRatio > 0 ? pixelRatio : nil),
-            osVersion: osVersion ?? (collectedOsVersion.isEmpty ? nil : collectedOsVersion)
+            timezone: override(timezone) ?? collectedTimezone,
+            language: override(language) ?? collectedLanguage,
+            screenWidth: override(screenWidth) ?? collectedWidth,
+            screenHeight: override(screenHeight) ?? collectedHeight,
+            devicePixelRatio: override(devicePixelRatio) ?? (pixelRatio > 0 ? pixelRatio : nil),
+            osVersion: override(osVersion) ?? (collectedOsVersion.isEmpty ? nil : collectedOsVersion)
         )
 
         do {
