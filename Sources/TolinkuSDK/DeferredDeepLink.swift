@@ -99,19 +99,41 @@ public final class DeferredDeepLink: Sendable {
 
     /// Claim a deferred deep link by matching device signals.
     ///
-    /// This automatically collects timezone, language, and screen dimensions
-    /// from the current device and sends them to the server for fingerprint matching.
+    /// The signals are collected from the device, so nothing needs passing. Pass
+    /// one only where you hold a better value than the SDK can read, and pass it
+    /// in the form matching compares against: an IANA timezone (`Asia/Seoul`),
+    /// a BCP-47 language tag with its region (`ko-KR`), screen size in points,
+    /// and a version starting with a digit (`17.1`).
     ///
-    /// - Parameter appspaceId: The Appspace ID to match against.
+    /// A signal that is absent is skipped rather than counted as a failed
+    /// comparison, so leaving one out is safe. One in the wrong shape is worse
+    /// than none, which is why these are overrides rather than the only source.
+    ///
+    /// - Parameters:
+    ///   - appspaceId: The Appspace ID to match against.
+    ///   - timezone: IANA identifier, overriding the device's.
+    ///   - language: BCP-47 tag with region, overriding the device's.
+    ///   - screenWidth: Screen width in points.
+    ///   - screenHeight: Screen height in points.
+    ///   - devicePixelRatio: Ratio of physical pixels to points.
+    ///   - osVersion: Version compared on its leading digits.
     /// - Returns: The matched deep link info, or nil if no match was found.
-    public func claimBySignals(appspaceId: String) async throws -> DeferredDeepLinkResponse? {
-        let timezone = TimeZone.current.identifier
+    public func claimBySignals(
+        appspaceId: String,
+        timezone: String? = nil,
+        language: String? = nil,
+        screenWidth: Int? = nil,
+        screenHeight: Int? = nil,
+        devicePixelRatio: Double? = nil,
+        osVersion: String? = nil
+    ) async throws -> DeferredDeepLinkResponse? {
+        let collectedTimezone = TimeZone.current.identifier
 
         // Must be a full BCP-47 tag with region ("ko-KR"), because the value this
         // is matched against is the landing page's `navigator.language`, which
         // always carries one. Sending the bare primary subtag ("ko") meant the
         // language signal could never score, capping every iOS match.
-        let language: String = {
+        let collectedLanguage: String = {
             if let preferred = Locale.preferredLanguages.first, !preferred.isEmpty {
                 return preferred
             }
@@ -129,8 +151,8 @@ public final class DeferredDeepLink: Sendable {
             return code
         }()
 
-        let screenWidth: Int
-        let screenHeight: Int
+        let collectedWidth: Int
+        let collectedHeight: Int
         #if canImport(UIKit)
         if #available(iOS 16, *) {
             let bounds = await MainActor.run {
@@ -140,16 +162,16 @@ public final class DeferredDeepLink: Sendable {
                     .screen
                     .bounds ?? .zero
             }
-            screenWidth = Int(bounds.width)
-            screenHeight = Int(bounds.height)
+            collectedWidth = Int(bounds.width)
+            collectedHeight = Int(bounds.height)
         } else {
             let bounds = await MainActor.run { UIScreen.main.bounds }
-            screenWidth = Int(bounds.width)
-            screenHeight = Int(bounds.height)
+            collectedWidth = Int(bounds.width)
+            collectedHeight = Int(bounds.height)
         }
         #else
-        screenWidth = 0
-        screenHeight = 0
+        collectedWidth = 0
+        collectedHeight = 0
         #endif
 
         // Pixel ratio separates models that report the same logical size, and the
@@ -159,19 +181,23 @@ public final class DeferredDeepLink: Sendable {
         pixelRatio = await MainActor.run { Double(UIScreen.main.scale) }
         #endif
 
-        var osVersion = ""
+        var collectedOsVersion = ""
         #if canImport(UIKit)
-        osVersion = await MainActor.run { UIDevice.current.systemVersion }
+        collectedOsVersion = await MainActor.run { UIDevice.current.systemVersion }
         #endif
 
+        // Anything the caller passed wins. A value from their own lookup is
+        // better than one inferred here, and passing one must not discard the
+        // rest, which is the mistake that makes a partial override worse than
+        // none at all.
         let body = ClaimBySignalsRequest(
             appspaceId: appspaceId,
-            timezone: timezone,
-            language: language,
-            screenWidth: screenWidth,
-            screenHeight: screenHeight,
-            devicePixelRatio: pixelRatio > 0 ? pixelRatio : nil,
-            osVersion: osVersion.isEmpty ? nil : osVersion
+            timezone: timezone ?? collectedTimezone,
+            language: language ?? collectedLanguage,
+            screenWidth: screenWidth ?? collectedWidth,
+            screenHeight: screenHeight ?? collectedHeight,
+            devicePixelRatio: devicePixelRatio ?? (pixelRatio > 0 ? pixelRatio : nil),
+            osVersion: osVersion ?? (collectedOsVersion.isEmpty ? nil : collectedOsVersion)
         )
 
         do {

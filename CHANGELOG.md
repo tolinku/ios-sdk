@@ -24,6 +24,13 @@
   when reported, or never, is answered on the first call and nothing further is
   sent for the rest of the launch.
 
+- `claimBySignals` accepts the signals as parameters, overriding what the device
+  reports. The Flutter, React Native and web SDKs already did; these two took
+  none, so an app holding a better value than the SDK could read had nowhere to
+  put it. Overriding one signal keeps the rest: matching compares only what both
+  sides supplied, so dropping the others would leave less to compare on than
+  passing nothing at all.
+
 ## 0.4.0
 
 ### Added
