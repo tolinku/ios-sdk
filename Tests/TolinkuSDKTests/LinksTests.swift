@@ -134,8 +134,11 @@ final class LinksTests: XCTestCase {
     func testSaysNothingForSomethingThatIsNotALink() async {
         respond(answer)
 
-        XCTAssertNil(await links.resolve("/order/1007100"))
-        XCTAssertNil(await links.resolve(""))
+        // Bound first: XCTAssertNil takes an autoclosure, which cannot await.
+        let path = await links.resolve("/order/1007100")
+        let empty = await links.resolve("")
+        XCTAssertNil(path)
+        XCTAssertNil(empty)
         XCTAssertTrue(MockURLProtocol.requestLog.isEmpty)
     }
 
@@ -153,6 +156,7 @@ final class LinksTests: XCTestCase {
     func testReturnsNilForALinkThisAppspaceDoesNotOwn() async {
         respond("{}")
 
-        XCTAssertNil(await links.resolve("https://links.example.com/whatever/1"))
+        let link = await links.resolve("https://links.example.com/whatever/1")
+        XCTAssertNil(link)
     }
 }
