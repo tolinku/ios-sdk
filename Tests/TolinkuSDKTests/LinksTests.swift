@@ -100,6 +100,19 @@ final class LinksTests: XCTestCase {
         XCTAssertEqual(resolved.route.linkType, "dynamic")
     }
 
+    func testAsksWithoutTheAPIKeySinceTheHostIsNotNecessarilyOurs() async {
+        // The origin comes from the URL this was handed. An app resolving a
+        // link from somewhere it does not control would otherwise send the
+        // Appspace's key to a stranger.
+        respond(answer)
+
+        _ = await links.resolve("https://links.example.com/s7k2p9q/4821")
+
+        let headers = MockURLProtocol.requestLog.first?.allHTTPHeaderFields ?? [:]
+        XCTAssertNil(headers["X-API-Key"])
+        XCTAssertNil(headers["Authorization"])
+    }
+
     func testLeavesTheQueryStringOutOfTheQuestion() async {
         // A tapped link usually carries utm parameters, and they say nothing
         // about which route it is.
