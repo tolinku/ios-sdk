@@ -66,6 +66,13 @@ public final class Links: Sendable {
                 authenticated: false,
                 origin: origin
             )
+            // The answer went to a host taken from the URL this was given, so an
+            // app resolving a link from somewhere it does not control is talking
+            // to a stranger. The contract is a path: a full URL, or a protocol
+            // relative "//host" that reads as one, is a redirect waiting to
+            // happen in whatever the app does next.
+            guard resolved.deepLinkPath.hasPrefix("/"),
+                  !resolved.deepLinkPath.hasPrefix("//") else { return nil }
             return resolved
         } catch {
             return nil

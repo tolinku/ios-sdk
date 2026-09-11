@@ -121,6 +121,31 @@ final class LinksTests: XCTestCase {
         XCTAssertEqual(sentBody()?["path"], "/promo/a%2Fb")
     }
 
+    /// resolve sends its question to a host taken from the URL it was given, so
+    /// an app resolving a link from somewhere it does not control is talking to
+    /// a stranger. Anything but a path is a redirect waiting to happen.
+    private func assertRefuses(path badPath: String) async {
+        respond(answer.replacingOccurrences(of: "/order/4821/receipt", with: badPath))
+        let link = await links.resolve("https://links.example.com/s7k2p9q/4821")
+        XCTAssertNil(link)
+    }
+
+    func testRefusesAnAnswerThatIsAFullURL() async {
+        await assertRefuses(path: "https://evil.example.com/take-over")
+    }
+
+    func testRefusesAnAnswerThatIsProtocolRelative() async {
+        await assertRefuses(path: "//evil.example.com/take-over")
+    }
+
+    func testRefusesAnAnswerThatIsABareWord() async {
+        await assertRefuses(path: "order/4821")
+    }
+
+    func testRefusesAnAnswerThatIsNothing() async {
+        await assertRefuses(path: "")
+    }
+
     func testSaysNothingForACustomSchemeLink() async {
         // That one already carries the path the app wants.
         respond(answer)
