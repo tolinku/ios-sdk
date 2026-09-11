@@ -4,7 +4,7 @@ import XCTest
 /// Turning a link the system handed the app into something routable.
 ///
 /// The URL an app receives is the one that was tapped, exactly as written. A
-/// short link is an opaque code, `/imbwmum/1007100`, and nothing on the device
+/// short link is an opaque code, `/s7k2p9q/4821`, and nothing on the device
 /// can say what the code stands for. An app parsing the path itself sees a
 /// first component it has never heard of and does nothing, so the link opens
 /// the app and appears to fail with no error and no screen.
@@ -26,9 +26,9 @@ final class LinksTests: XCTestCase {
             "template": "none",
             "link_type": "dynamic"
         },
-        "token": "1007100",
-        "deep_link_path": "/order/1007100/receipt",
-        "appspace": {"name": "Tasonic", "slug": "tasonic"}
+        "token": "4821",
+        "deep_link_path": "/order/4821/receipt",
+        "appspace": {"name": "Example App", "slug": "example"}
     }
     """
 
@@ -83,18 +83,18 @@ final class LinksTests: XCTestCase {
     func testAsksTheLinkItsOwnHostWithJustThePath() async throws {
         respond(answer)
 
-        let link = await links.resolve("https://links.tasonic.com/imbwmum/1007100")
+        let link = await links.resolve("https://links.example.com/s7k2p9q/4821")
 
         XCTAssertEqual(MockURLProtocol.requestLog.count, 1)
         XCTAssertEqual(
             MockURLProtocol.requestLog.first?.url?.absoluteString,
-            "https://links.tasonic.com/v1/api/path"
+            "https://links.example.com/v1/api/path"
         )
-        XCTAssertEqual(sentBody()?["path"], "/imbwmum/1007100")
+        XCTAssertEqual(sentBody()?["path"], "/s7k2p9q/4821")
 
         let resolved = try XCTUnwrap(link)
-        XCTAssertEqual(resolved.token, "1007100")
-        XCTAssertEqual(resolved.deepLinkPath, "/order/1007100/receipt")
+        XCTAssertEqual(resolved.token, "4821")
+        XCTAssertEqual(resolved.deepLinkPath, "/order/4821/receipt")
         XCTAssertEqual(resolved.route.prefix, "order/{token}/receipt")
         XCTAssertEqual(resolved.route.name, "Order Receipt")
         XCTAssertEqual(resolved.route.linkType, "dynamic")
@@ -105,9 +105,9 @@ final class LinksTests: XCTestCase {
         // about which route it is.
         respond(answer)
 
-        _ = await links.resolve("https://links.tasonic.com/imbwmum/1007100?utm_source=qr")
+        _ = await links.resolve("https://links.example.com/s7k2p9q/4821?utm_source=qr")
 
-        XCTAssertEqual(sentBody()?["path"], "/imbwmum/1007100")
+        XCTAssertEqual(sentBody()?["path"], "/s7k2p9q/4821")
     }
 
     func testKeepsAnEncodedSlashInTheTokenEncoded() async {
@@ -116,7 +116,7 @@ final class LinksTests: XCTestCase {
         // or to nothing.
         respond(answer)
 
-        _ = await links.resolve("https://links.tasonic.com/promo/a%2Fb")
+        _ = await links.resolve("https://links.example.com/promo/a%2Fb")
 
         XCTAssertEqual(sentBody()?["path"], "/promo/a%2Fb")
     }
@@ -125,7 +125,7 @@ final class LinksTests: XCTestCase {
         // That one already carries the path the app wants.
         respond(answer)
 
-        let link = await links.resolve("tasonic://order/1007100/receipt")
+        let link = await links.resolve("example://order/4821/receipt")
 
         XCTAssertNil(link)
         XCTAssertTrue(MockURLProtocol.requestLog.isEmpty)
@@ -135,7 +135,7 @@ final class LinksTests: XCTestCase {
         respond(answer)
 
         // Bound first: XCTAssertNil takes an autoclosure, which cannot await.
-        let path = await links.resolve("/order/1007100")
+        let path = await links.resolve("/order/4821")
         let empty = await links.resolve("")
         XCTAssertNil(path)
         XCTAssertNil(empty)
@@ -148,7 +148,7 @@ final class LinksTests: XCTestCase {
         // start. 404 is not retried, so one response is enough.
         respond("{}", status: 404)
 
-        let link = await links.resolve("https://links.tasonic.com/imbwmum/1007100")
+        let link = await links.resolve("https://links.example.com/s7k2p9q/4821")
 
         XCTAssertNil(link)
     }
