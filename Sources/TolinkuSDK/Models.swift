@@ -416,3 +416,35 @@ public struct APIErrorResponse: Codable, Sendable {
     public let message: String?
     public let code: String?
 }
+
+/// What a Tolinku link turned out to mean.
+///
+/// Returned by ``Links/resolve(_:)``.
+public struct ResolvedLink: Codable, Sendable {
+    /// The route that answers this link.
+    public let route: ResolvedRoute
+    /// The token the link carried, or "" where it carried none.
+    public let token: String
+    /// The canonical path, with the token wherever the route's prefix puts it.
+    public let deepLinkPath: String
+
+    enum CodingKeys: String, CodingKey {
+        case route
+        case token
+        case deepLinkPath = "deep_link_path"
+    }
+
+    public struct ResolvedRoute: Codable, Sendable {
+        public let prefix: String
+        public let name: String
+        public let template: String
+        public let linkType: String?
+
+        enum CodingKeys: String, CodingKey {
+            case prefix
+            case name
+            case template
+            case linkType = "link_type"
+        }
+    }
+}

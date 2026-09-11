@@ -8,7 +8,7 @@ import os.log
 public final class Tolinku: Sendable {
 
     /// The current SDK version string.
-    public static let sdkVersion = "0.5.0"
+    public static let sdkVersion = "0.6.0"
 
     // MARK: - Singleton
 
@@ -69,6 +69,12 @@ public final class Tolinku: Sendable {
     /// Deferred deep link claiming.
     public let deferred: DeferredDeepLink
 
+    /// Turning a link the app was handed into the route and token it means.
+    ///
+    /// Needed for short links, which arrive as an opaque code that nothing on
+    /// the device can interpret. See ``Links/resolve(_:)``.
+    public let links: Links
+
     /// In-app messages.
     public let messages: Messages
 
@@ -84,6 +90,7 @@ public final class Tolinku: Sendable {
         self.ecommerce = Ecommerce(client: client, getUserId: { userIdBox.current })
         self.referrals = Referrals(client: client)
         self.deferred = DeferredDeepLink(client: client)
+        self.links = Links(client: client)
         self.messages = Messages(client: client)
     }
 

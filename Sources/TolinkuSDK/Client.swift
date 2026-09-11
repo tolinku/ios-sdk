@@ -69,10 +69,11 @@ final class Client: Sendable {
     func post<B: Encodable, T: Decodable>(
         path: String,
         body: B,
-        authenticated: Bool = true
+        authenticated: Bool = true,
+        origin: String? = nil
     ) async throws -> T {
         let encoder = JSONEncoder()
-        var request = try buildRequest(method: "POST", path: path, authenticated: authenticated)
+        var request = try buildRequest(method: "POST", path: path, authenticated: authenticated, origin: origin)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         return try await performWithRetry(request)
@@ -97,10 +98,16 @@ final class Client: Sendable {
         method: String,
         path: String,
         queryItems: [URLQueryItem]? = nil,
-        authenticated: Bool = true
+        authenticated: Bool = true,
+        origin: String? = nil
     ) throws -> URLRequest {
-        guard var components = URLComponents(string: baseURL + path) else {
-            throw TolinkuError.invalidURL(baseURL + path)
+        // `origin` is for the few public endpoints that work out which Appspace
+        // they belong to from the hostname the request arrives on rather than
+        // from a key or an id. A question about a link on a customer's own
+        // domain has to be asked on that domain.
+        let base = origin.map { $0.hasSuffix("/") ? String($0.dropLast()) : $0 } ?? baseURL
+        guard var components = URLComponents(string: base + path) else {
+            throw TolinkuError.invalidURL(base + path)
         }
         if let queryItems, !queryItems.isEmpty {
             components.queryItems = queryItems
