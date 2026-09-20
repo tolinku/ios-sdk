@@ -111,7 +111,8 @@ final class NavigableUrlTests: XCTestCase {
 
     func testIsNotFooledByWhitespaceAroundOrInsideADeniedScheme() {
         // Tabs and newlines inside a scheme are ignored by whatever follows the
-        // URL, so these navigate as javascript: unless they are stripped first.
+        // URL, so these navigate as javascript: unless they are stripped first,
+        // after which every one of them reads as the denied scheme it is.
         XCTAssertFalse(isNavigableUrl("  javascript:alert(1)"))
         XCTAssertFalse(isNavigableUrl("javascript:alert(1)  "))
         XCTAssertFalse(isNavigableUrl("java\tscript:alert(1)"))
@@ -119,6 +120,32 @@ final class NavigableUrlTests: XCTestCase {
         XCTAssertFalse(isNavigableUrl("java\r\nscript:alert(1)"))
         XCTAssertFalse(isNavigableUrl("\tjavascript:alert(1)"))
         XCTAssertFalse(isNavigableUrl("  Java\tScript:alert(1)"))
+    }
+
+    func testStripsACrlfTheWayTheOtherSdksDo() {
+        // Swift reads "\r\n" as a single Character, so stripping by character
+        // left the pair in place and a URL carrying one was refused as
+        // unparseable rather than normalised. Android, Flutter and React Native
+        // all strip it and open the link, and a denied scheme spelt across one
+        // has to be caught for the same reason a tab is.
+        XCTAssertTrue(isNavigableUrl("my\r\napp://order/4821"))
+        XCTAssertTrue(isNavigableUrl("https://example.com/pro\r\nmo"))
+        XCTAssertFalse(isNavigableUrl("ja\r\nva\r\nscript:alert(1)"))
+    }
+
+    func testAllowsAnUnderscoreInAScheme() {
+        // RFC 3986 has no "_" in a scheme, but iOS registers one happily in
+        // `CFBundleURLSchemes` and apps ship with it, so refusing it is the
+        // silent drop this denylist exists to undo, narrowed to the customers
+        // whose scheme happens to carry one.
+        XCTAssertTrue(isNavigableUrl("my_app://order/4821"))
+        XCTAssertTrue(isNavigableUrl("my_app_://order/4821"))
+        XCTAssertTrue(isNavigableUrl("  My_App://order/4821  "))
+        // Still a scheme, so a denied one written with an underscore beside it
+        // is a different scheme rather than a way through.
+        XCTAssertTrue(isNavigableUrl("java_script:alert(1)"))
+        // And a leading underscore is still not a scheme at all.
+        XCTAssertFalse(isNavigableUrl("_app://order/4821"))
     }
 
     func testStillAllowsACustomSchemeBehindWhitespace() {
@@ -146,5 +173,105 @@ final class NavigableUrlTests: XCTestCase {
         // unrecognised.
         XCTAssertFalse(isNavigableUrl("javascript:alert(1, 2)"))
         XCTAssertTrue(isNavigableUrl("myapp://order/4821 promo"))
+    }
+}
+
+/// What tapping a message's call to action actually does.
+///
+/// The presenter itself needs UIKit and WebKit, so no test in this suite can
+/// reach it and a change there is asserted nowhere. The decision it makes lives
+/// on its own for that reason, and this is where it is held to account.
+final class MessageActionTests: XCTestCase {
+
+    private func followedUrl(_ urlString: String?) -> URL? {
+        guard case let .follow(_, url) = messageAction(for: urlString) else { return nil }
+        return url
+    }
+
+    func testFollowsADeepLinkIntoTheHostApp() {
+        XCTAssertEqual(
+            messageAction(for: "myapp://order/4821"),
+            .follow(urlString: "myapp://order/4821", url: URL(string: "myapp://order/4821"))
+        )
+    }
+
+    func testFollowsADeepLinkWhoseSchemeCarriesAnUnderscore() {
+        // Whether Foundation builds a URL out of one of these depends on the iOS
+        // version, so this asserts only the part that is ours: the action is
+        // followed, and the app's own handler hears about it either way.
+        guard case .follow = messageAction(for: "my_app://order/4821") else {
+            return XCTFail("expected my_app://order/4821 to be followed")
+        }
+    }
+
+    func testRefusesASchemeThatCanRunCode() {
+        for urlString in [
+            "javascript:alert(1)",
+            "JavaScript:alert(1)",
+            "java\tscript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "file:///etc/passwd",
+        ] {
+            XCTAssertEqual(messageAction(for: urlString), .refuse, "expected \(urlString) to be refused")
+        }
+    }
+
+    func testRefusesSomethingThatNamesNoSchemeAtAll() {
+        XCTAssertEqual(messageAction(for: nil), .refuse)
+        XCTAssertEqual(messageAction(for: ""), .refuse)
+        XCTAssertEqual(messageAction(for: "   "), .refuse)
+        XCTAssertEqual(messageAction(for: "/promo"), .refuse)
+        XCTAssertEqual(messageAction(for: "#section"), .refuse)
+    }
+
+    func testBuildsAUrlForALinkTheDirectInitialiserRefuses() {
+        // `Package.swift` declares iOS 15, where URL(string:) returns nil for any
+        // raw space or non-ASCII character. These are working deep links, and
+        // handing them to the initialiser alone dropped them.
+        XCTAssertEqual(followedUrl("myapp://open now/order/4821")?.absoluteString, "myapp://open%20now/order/4821")
+        XCTAssertEqual(followedUrl("myapp://search?q=café")?.absoluteString, "myapp://search?q=caf%C3%A9")
+        XCTAssertEqual(followedUrl("https://example.com/promo")?.absoluteString, "https://example.com/promo")
+    }
+
+    func testDoesNotEncodeAnAlreadyEncodedUrlTwice() {
+        // `%` stays legal on the repair pass, or `%20` becomes `%2520` and the
+        // app receives a path nobody wrote.
+        XCTAssertEqual(
+            followedUrl("myapp://open now/a%20b")?.absoluteString,
+            "myapp://open%20now/a%20b"
+        )
+    }
+
+    func testKeepsTheQueryAndFragmentWhoseCharactersItCouldHaveEncoded() {
+        XCTAssertEqual(
+            followedUrl("myapp://open now/order?ref=promo#top")?.absoluteString,
+            "myapp://open%20now/order?ref=promo#top"
+        )
+    }
+
+    func testOpensTheSameUrlWhoseSchemeWasVetted() {
+        // The scheme is read from the normalised string, so the URL has to be
+        // built from that same string. Encoding the raw text instead would turn
+        // the wrapping spaces into %20 and open something with no scheme at all.
+        XCTAssertEqual(followedUrl("  myapp://order/4821  ")?.absoluteString, "myapp://order/4821")
+        XCTAssertEqual(followedUrl("my\r\napp://order/4821")?.absoluteString, "myapp://order/4821")
+        XCTAssertEqual(followedUrl("my\tapp://order/4821")?.absoluteString, "myapp://order/4821")
+    }
+
+    func testHandsTheHostAppTheStringItWasGiven() {
+        // Whatever repair the URL needed, the app's own handler reads its own
+        // deep links and gets them exactly as the message wrote them.
+        guard case let .follow(urlString, _) = messageAction(for: "  myapp://order/4821  ") else {
+            return XCTFail("expected the action to be followed")
+        }
+        XCTAssertEqual(urlString, "  myapp://order/4821  ")
+    }
+
+    func testStillFollowsALinkNoUrlCanBeBuiltFrom() {
+        // A scheme worth allowing whose string Foundation will not parse is not
+        // the same thing as a scheme worth refusing. The host app's handler
+        // takes the string and knows what to do with it, and only the branch
+        // that needs a URL of its own has nothing to work with.
+        XCTAssertEqual(messageAction(for: "myapp://[bad"), .follow(urlString: "myapp://[bad", url: nil))
     }
 }

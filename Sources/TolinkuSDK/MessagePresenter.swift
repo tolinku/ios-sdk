@@ -290,10 +290,11 @@ private final class MessageViewController: UIViewController, WKScriptMessageHand
         // on a deep linking product the natural button opens a screen in the
         // host app, `myapp://order/4821`. So this denies the schemes that can
         // run code and leaves the rest to the app, rather than allowlisting http
-        // the way an image source does. Shared with the rest of the SDK so the
-        // rule is one rule rather than four copies that drift apart.
-        guard isNavigableUrl(urlString), let url = URL(string: urlString) else {
-            os_log(.default, log: .default, "Blocked navigation to unsafe URL scheme: %{public}@", urlString)
+        // the way an image source does. The decision itself lives beside the
+        // rest of the URL rules, where the test suite can reach it: this file
+        // needs UIKit and WebKit, so nothing in it is exercised by a test.
+        guard case let .follow(destination, url) = messageAction(for: urlString) else {
+            os_log(.default, log: .default, "Blocked a message action naming a scheme that can run code, or no scheme at all: %{public}@", urlString)
             dismissMessage()
             return
         }
@@ -301,9 +302,15 @@ private final class MessageViewController: UIViewController, WKScriptMessageHand
         TolinkuMessagePresenter.markDismissed(messageId: messageId)
         dismiss(animated: true) { [onAction] in
             if let onAction {
-                onAction(urlString)
-            } else {
+                onAction(destination)
+            } else if let url {
                 UIApplication.shared.open(url)
+            } else {
+                // The scheme was fine and the app named no handler of its own,
+                // so there is nothing left to open it with. Worth saying plainly,
+                // because it is a different problem from a refused scheme and
+                // the one thing that fixes it is the app adopting `onAction`.
+                os_log(.default, log: .default, "Could not build a URL from a message action, and no onAction handler is set: %{public}@", destination)
             }
         }
     }
