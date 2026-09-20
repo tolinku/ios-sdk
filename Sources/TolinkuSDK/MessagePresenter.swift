@@ -286,10 +286,13 @@ private final class MessageViewController: UIViewController, WKScriptMessageHand
     }
 
     private func dismissAndNavigate(to urlString: String) {
-        // Only http and https: every other scheme is a way of doing something
-        // other than opening a web page. Shared with the rest of the SDK so the
+        // A message's call to action is the one place a custom scheme belongs:
+        // on a deep linking product the natural button opens a screen in the
+        // host app, `myapp://order/4821`. So this denies the schemes that can
+        // run code and leaves the rest to the app, rather than allowlisting http
+        // the way an image source does. Shared with the rest of the SDK so the
         // rule is one rule rather than four copies that drift apart.
-        guard isSafeUrl(urlString), let url = URL(string: urlString) else {
+        guard isNavigableUrl(urlString), let url = URL(string: urlString) else {
             os_log(.default, log: .default, "Blocked navigation to unsafe URL scheme: %{public}@", urlString)
             dismissMessage()
             return
