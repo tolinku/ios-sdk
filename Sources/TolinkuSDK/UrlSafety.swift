@@ -24,7 +24,21 @@ func isSafeUrl(_ url: String?) -> Bool {
 }
 
 /// The schemes that can run code or forge an origin when something follows them.
-private let executableSchemes: Set<String> = ["javascript", "vbscript", "data", "blob", "file"]
+/// The schemes that run code, read local storage, or hide another scheme.
+///
+/// The last three do nothing on iOS: they are here because the Android, React
+/// Native and Flutter SDKs need them, and the four are documented as applying
+/// one rule. A rule that differs per platform is one nobody can check.
+private let executableSchemes: Set<String> = [
+    "javascript",
+    "vbscript",
+    "data",
+    "blob",
+    "file",
+    "content",
+    "jar",
+    "filesystem",
+]
 
 /// A URL with the characters removed that whatever follows it ignores anyway.
 ///

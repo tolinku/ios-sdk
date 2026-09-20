@@ -91,6 +91,15 @@ final class NavigableUrlTests: XCTestCase {
         XCTAssertTrue(isNavigableUrl("HTTPS://example.com/promo"))
     }
 
+    func testRefusesTheSchemesThatReadLocalStorageOrWrapAnotherUrl() {
+        // These do nothing on iOS. They are refused here because the four SDKs
+        // are documented as applying one rule, and a rule that differs per
+        // platform is one nobody can check.
+        XCTAssertFalse(isNavigableUrl("content://com.host/secret"))
+        XCTAssertFalse(isNavigableUrl("jar:file:///x!/y"))
+        XCTAssertFalse(isNavigableUrl("filesystem:file:///persistent/x"))
+    }
+
     func testRefusesEverySchemeThatCanRunCodeOrForgeAnOrigin() {
         for url in [
             "javascript:alert(1)",
