@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0
+
+Maintenance only. Nothing in `Sources` changed except the reported SDK version,
+so there is nothing here you need to act on. It carries a version because all
+five SDKs moved to 0.7.0 together.
+
+### Changed
+
+- CI records the toolchain it used, and a second job builds and tests the
+  package under the Swift 6 language mode on every push.
+
+  That mode turns the data race checks that are warnings today into errors.
+  The sources are already written for it, with `Sendable` conformances,
+  `@MainActor`, and explicit `nonisolated(unsafe)` on the two stored
+  observers, but nobody had ever run it. The job passes the language mode on
+  the command line rather than setting it in `Package.swift`, so consumers
+  resolve this package exactly as they do now, and it is allowed to fail so it
+  reports rather than blocks.
+
+  Once it has been green for a while, the setting moves into `Package.swift`
+  behind `swift-tools-version: 6.0` and the job goes away. That is a real
+  release when it happens; this is not.
+
 ## 0.6.1
 
 ### Fixed

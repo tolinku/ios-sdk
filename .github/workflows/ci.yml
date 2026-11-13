@@ -9,6 +9,34 @@ jobs:
   test:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      # Recorded rather than pinned. The package declares no dependencies and
+      # swift-tools-version 5.9, so it builds on anything from Swift 5.9 up, and
+      # knowing which toolchain a given run used is what makes a failure here
+      # readable later.
+      - run: swift --version
       - run: swift build
       - run: swift test
+
+  # Swift 6 language mode is where this package has to end up: it turns the
+  # data-race checks that are warnings under the 5.x language mode into errors.
+  # The sources are already written for it, with Sendable conformances,
+  # @MainActor and explicit nonisolated(unsafe) on the two stored observers, so
+  # the migration may well be clean, but nobody has ever run it.
+  #
+  # This job answers that question on every push without changing what ships:
+  # the language mode is passed on the command line rather than set in
+  # Package.swift, so consumers keep resolving the package exactly as they do
+  # now. It is allowed to fail, so it reports rather than blocks. When it has
+  # been green for a while, move the setting into Package.swift behind
+  # swift-tools-version 6.0 and delete this job.
+  swift6-language-mode:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift --version
+      - name: Build under the Swift 6 language mode
+        run: swift build -Xswiftc -swift-version -Xswiftc 6
+      - name: Test under the Swift 6 language mode
+        run: swift test -Xswiftc -swift-version -Xswiftc 6
