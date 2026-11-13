@@ -254,13 +254,30 @@ public final class Tolinku: Sendable {
     /// this, you can call ``configure(apiKey:baseURL:)`` again to reinitialize the SDK.
     ///
     /// Prefer ``destroy()``, which is the name every Tolinku SDK uses.
-    public static func shutdown() async {
+    /// Clears the shared instance under the lock and returns what it was.
+    ///
+    /// Synchronous on purpose, and called from ``shutdown()`` rather than
+    /// inlined there. `NSLock.lock()` and `unlock()` are unavailable from an
+    /// async context under the Swift 6 language mode: the compiler cannot see
+    /// that a locked region is free of suspension points, and a lock held
+    /// across an await blocks a thread of the cooperative pool. This region
+    /// never did await, so the behaviour is unchanged, but putting it in a
+    /// synchronous function is what makes that true by construction rather
+    /// than by inspection.
+    ///
+    /// `withLock` would say the same thing in one line and is not used here
+    /// because it would raise the platform floor above the iOS 15 this package
+    /// supports.
+    private static func takeSharedInstance() -> Tolinku? {
         lock.lock()
+        defer { lock.unlock() }
         let instance = _shared
         _shared = nil
-        lock.unlock()
+        return instance
+    }
 
-        guard let instance else { return }
+    public static func shutdown() async {
+        guard let instance = takeSharedInstance() else { return }
 
         // Tear down analytics + ecommerce (flush events, cancel timers, remove observers)
         await instance.analytics.shutdown()
