@@ -7,12 +7,24 @@ import Foundation
 /// (HTTPURLResponse, Data?) or throws an error to simulate network failures.
 final class MockURLProtocol: URLProtocol {
 
+    // Both of these are static because URLProtocol subclasses are instantiated
+    // by Foundation, not by us, so there is no instance to hand a handler to.
+    //
+    // nonisolated(unsafe) rather than a lock or an actor. Under the Swift 6
+    // language mode these are rejected as nonisolated global shared mutable
+    // state, which is a fair description of what they are. They are safe here
+    // for a reason that is about the tests rather than about the type: each
+    // test sets the handler, drives requests through one URLSession, and reads
+    // the log, all on its own thread, and reset() clears both between tests.
+    // Guarding them would make this double look thread-safe in a way that
+    // would not survive two tests sharing it concurrently anyway.
+
     /// Handler that determines the response for each intercepted request.
     /// Must be set before starting any request.
-    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data?))?
+    nonisolated(unsafe) static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data?))?
 
     /// Records all requests made during a test, in order.
-    static var requestLog: [URLRequest] = []
+    nonisolated(unsafe) static var requestLog: [URLRequest] = []
 
     /// Reset all state between tests.
     static func reset() {
