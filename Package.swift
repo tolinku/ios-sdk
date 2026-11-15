@@ -17,7 +17,16 @@ let package = Package(
     targets: [
         .target(
             name: "TolinkuSDK",
-            path: "Sources/TolinkuSDK"
+            path: "Sources/TolinkuSDK",
+            resources: [
+                // A manifest that is not declared here is not shipped. Swift
+                // Package Manager copies declared resources into a bundle the
+                // app embeds, and Xcode's privacy report reads .xcprivacy files
+                // out of those bundles; a file sitting in Sources and named
+                // nowhere reaches nobody. Matches the Flutter plugin's
+                // Package.swift, which ships the same file the same way.
+                .process("PrivacyInfo.xcprivacy")
+            ]
         ),
         .testTarget(
             name: "TolinkuSDKTests",

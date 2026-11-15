@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  What TolinkuSDK does on the device, declared for the app that embeds it.
+
+  Two separate things live in this file, and they are required of us to
+  different degrees.
+
+  NSPrivacyAccessedAPITypes is the part Apple checks. The SDK calls
+  UserDefaults, which is on the required reason API list, so an app embedding
+  this package inherits that call. Without this declaration App Store Connect
+  answers an upload with ITMS-91053, and the developer has to work out which of
+  their dependencies caused it. Three files here use it: MessagePresenter for
+  message frequency capping, Ecommerce for the cart id, and DeferredDeepLink for
+  the claim once marker. All three are UserDefaults.standard, read and written by
+  the app itself, with no app group and no shared container, which is the CA92.1
+  reason exactly.
+
+  NSPrivacyCollectedDataTypes is not required of an SDK that is not on Apple's
+  commonly used list, and Tolinku is not. It is here because the developer
+  shipping an attribution SDK has to answer for our data flows in their own App
+  Store privacy label, and an absent declaration makes them guess. It describes
+  the SDK's whole surface, so a developer who uses only deep linking will be
+  declaring less than this. README.md maps each entry to the API that causes it,
+  so they can narrow it honestly.
+
+  NSPrivacyTracking is false and NSPrivacyTrackingDomains is empty, and both are
+  statements rather than defaults. The SDK never reads the advertising
+  identifier, never calls App Tracking Transparency, and never joins a person's
+  activity to data from another company's apps or sites. Deferred matching
+  compares coarse device signals inside Tolinku and discards them.
+-->
+<plist version="1.0">
+<dict>
+  <key>NSPrivacyTracking</key>
+  <false/>
+
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <!-- CA92.1: access to information accessible only to the app itself. -->
+        <string>CA92.1</string>
+      </array>
+    </dict>
+  </array>
+
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array>
+    <!--
+      Device signals read for deferred link matching: IANA timezone, BCP-47
+      language with region, screen size in points, pixel ratio and OS version.
+      Apple's list has no category for coarse device characteristics, so they
+      sit under Other Data Types. Sent only when claimBySignals is called, held
+      against a click rather than a person, and not linked to an identity.
+    -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+      </array>
+    </dict>
+
+    <!--
+      Link opens, custom events and the ecommerce interaction events
+      (view_item, add_to_cart, view_cart, add_to_wishlist, share, rate).
+      Linked, because setUserId attaches user_id to every event once it is set.
+    -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeProductInteraction</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+
+    <!-- ecommerce.search(term:) sends the term you pass it. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeSearchHistory</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+      </array>
+    </dict>
+
+    <!--
+      ecommerce.purchase, refund and beginCheckout carry a transaction id,
+      revenue, currency and line items.
+    -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+      </array>
+    </dict>
+
+    <!--
+      The identifier you pass to setUserId, and the referring and referred user
+      ids in the referral calls. Your own identifier, never one the SDK derives.
+    -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeUserID</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+      </array>
+    </dict>
+
+    <!--
+      referrals.create and referrals.complete take an optional display name for
+      a referral leaderboard. Omit it and nothing in this category is sent.
+    -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeName</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

@@ -281,6 +281,57 @@ await Tolinku.shutdown()
 | `renderToken(messageId:)` | Get a render token for a message |
 | `show(trigger:from:onAction:onDismiss:)` | Show the highest-priority message |
 
+## Privacy
+
+The package ships `PrivacyInfo.xcprivacy`. Swift Package Manager copies it into
+a bundle your app embeds, and Xcode folds it into the privacy report it
+generates when you archive, so there is nothing to add on your side.
+
+### Required reason API
+
+It declares one: `NSPrivacyAccessedAPICategoryUserDefaults`, with reason
+`CA92.1`. The SDK stores three things in `UserDefaults.standard`, all read and
+written only by your app, with no app group and no shared container:
+
+| What | Where | Why |
+|---|---|---|
+| Dismissal state, impression counts, last-shown timestamps | `MessagePresenter` | Honours a message's `dismiss_days` suppression window and its display cap |
+| Cart id | `tolinku.ecommerce` | Ties cart events together across launches |
+| Claim once marker | `tolinku.deferred` | Stops a deferred link being claimed twice |
+
+Nothing else in the package touches a required reason API. If that changes,
+`PrivacyManifestTests` fails before the release does.
+
+### Tracking
+
+`NSPrivacyTracking` is `false` and `NSPrivacyTrackingDomains` is empty. The SDK
+never reads the advertising identifier, never calls App Tracking Transparency,
+and never joins a person's activity to data from another company's apps or
+sites. You do not need to add an ATT prompt on our account.
+
+### Collected data types, and which of your calls cause them
+
+The manifest declares the SDK's whole surface, which is almost certainly more
+than your integration uses. Use this to narrow your own App Store privacy label
+to what you actually call. Nothing here is sent on your behalf: `links.resolve`
+makes no analytics call, and `trackLinkOpen` is something you invoke.
+
+| Declared type | Triggered by | What is sent |
+|---|---|---|
+| Other Data Types | `tolinku.deferred.claimBySignals` | IANA timezone, BCP-47 language with region, screen size in points, pixel ratio, OS version. Compared against the signals recorded at click time, then discarded. Not linked to an identity. |
+| Product Interaction | `trackLinkOpen`, `track`, and the ecommerce interaction events (`viewItem`, `addToCart`, `removeFromCart`, `viewCart`, `addToWishlist`, `share`, `rate`) | The event name and whatever properties you attach |
+| Search History | `tolinku.ecommerce.search(term:)` | The term you pass |
+| Purchase History | `purchase`, `refund`, `beginCheckout` | Transaction id, revenue, currency, line items |
+| User ID | `setUserId`, and the referral calls | Your own identifier for the person. The SDK never derives one |
+| Name | The optional `userName` on `referrals.create` and `referrals.complete` | A display name for a referral leaderboard. Omit it and nothing in this category is sent |
+
+Everything above except Other Data Types is declared as linked to identity,
+because once you call `setUserId` the SDK attaches `user_id` to every event. If
+you never call it, those flows carry no identifier from us.
+
+If you integrate only universal link handling and `links.resolve`, none of the
+six apply to you.
+
 ## Documentation
 
 Full documentation is available at [tolinku.com/docs](https://tolinku.com/docs).

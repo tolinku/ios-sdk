@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.7.1
+
+### Added
+
+- A privacy manifest, `PrivacyInfo.xcprivacy`, shipped as a resource of the
+  `TolinkuSDK` target.
+
+  The package calls `UserDefaults` in three places: message frequency capping
+  in `MessagePresenter`, the cart id in `Ecommerce`, and the claim once marker
+  in `DeferredDeepLink`. `UserDefaults` is on Apple's required reason API list,
+  so an app that embedded this package inherited those calls with nothing
+  declaring them. App Store Connect answers an upload in that state with
+  ITMS-91053, naming the API but not the dependency, which left you to work out
+  that it was us. The manifest declares the category with reason `CA92.1`,
+  access to information available only to the app itself, which is what all
+  three call sites do.
+
+  It also declares `NSPrivacyTracking` as false with no tracking domains. That
+  is a statement rather than a default: the SDK does not read the advertising
+  identifier, does not call App Tracking Transparency, and does not join a
+  person's activity to another company's data. Deferred matching compares
+  coarse device signals inside Tolinku and discards them.
+
+  Beyond what Apple requires, it declares the data the SDK sends, so you can
+  fill in your own App Store privacy label without reading our source. The
+  declaration covers the SDK's whole surface, and most integrations use less of
+  it than that, so README.md maps each entry to the call that causes it. Nothing
+  is sent on your behalf: `links.resolve` does not track, and `trackLinkOpen` is
+  something you call, so an integration that only resolves links triggers none
+  of the six.
+
+  The Flutter plugin has carried a manifest since 0.6.2 and this package did
+  not, which is the asymmetry that prompted the audit. Its declaration has been
+  widened in the same release, because the Dart side of that package makes the
+  same calls this one does.
+
+- `PrivacyManifestTests`, which fails if a source file starts calling a required
+  reason API that the manifest does not declare.
+
+  A declaration kept beside the code it describes drifts from it. The test
+  scans `Sources` for the five API categories Apple requires a reason for and
+  checks each one it finds against the manifest, so the next person to reach
+  for `FileManager` attributes or `systemUptime` is told before App Store
+  Connect tells them. It also checks that `Package.swift` still names the file,
+  because a manifest that is not declared as a resource is never copied into a
+  bundle and reaches no app at all while looking correct in the repository.
+
+### Changed
+
+- `Tolinku.sdkVersion` reports `0.7.1`.
+
 ## 0.7.0
 
 Maintenance only. Nothing in `Sources` changed except the reported SDK version,
