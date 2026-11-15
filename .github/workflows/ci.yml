@@ -17,6 +17,35 @@ jobs:
       - run: swift --version
       - run: swift build
       - run: swift test
+      # PrivacyManifestTests asserts that Package.swift names the manifest in
+      # its resources, which is a proxy: it reads the declaration rather than
+      # the result. If the declaration were wrong, the build would still
+      # succeed and the file would simply never reach an app. This reads what
+      # the build produced.
+      - name: Check the privacy manifest is in the built resource bundle
+        run: |
+          # Swift Package Manager names it <Package>_<Target>.bundle and puts it
+          # beside the build products, but the path varies by toolchain and
+          # architecture, so this looks for the bundle rather than assuming it.
+          found=$(find .build -path '*.bundle/*' -name 'PrivacyInfo.xcprivacy')
+          if [ -z "$found" ]; then
+            echo "the build produced no resource bundle containing the manifest"
+            echo "bundles present:"
+            find .build -name '*.bundle' -maxdepth 4 || echo "  none"
+            exit 1
+          fi
+          echo "$found"
+          # Present is not correct. plutil parses it, and the two keys Apple
+          # actually reads have to be there, so a truncated or renamed copy
+          # fails here rather than at App Store review.
+          for m in $found; do
+            plutil -lint "$m"
+            plutil -extract NSPrivacyAccessedAPITypes json -o - "$m" > /dev/null \
+              || { echo "$m has no NSPrivacyAccessedAPITypes"; exit 1; }
+            plutil -extract NSPrivacyCollectedDataTypes json -o - "$m" > /dev/null \
+              || { echo "$m has no NSPrivacyCollectedDataTypes"; exit 1; }
+          done
+          echo "manifest shipped in a bundle, parses, and declares both keys"
 
   # Swift 6 language mode is where this package has to end up: it turns the
   # data-race checks that are warnings under the 5.x language mode into errors.
