@@ -312,12 +312,20 @@ public struct LeaderboardResponse: Codable, Sendable {
 public struct DeferredDeepLinkResponse: Codable, Sendable {
     public let deepLinkPath: String
     public let appspaceId: String
+    /// The absolute URL for this link, for reporting the open that follows.
+    ///
+    /// Reporting an open needs the whole URL, not the path: the host is how the
+    /// server finds the Appspace and the only thing proving the link belongs to
+    /// it, and the device has no way to know it. Absent from servers older than
+    /// this field, so treat it as optional.
+    public let url: String?
     public let referrerId: String?
     public let referralCode: String?
 
     enum CodingKeys: String, CodingKey {
         case deepLinkPath = "deep_link_path"
         case appspaceId = "appspace_id"
+        case url
         case referrerId = "referrer_id"
         case referralCode = "referral_code"
     }
