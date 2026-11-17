@@ -214,8 +214,8 @@ public final class Tolinku: Sendable {
     /// own hand-off page opened the app, and that tap is already counted.
     ///
     /// Never throws.
-    public func trackLinkOpen(_ url: String) async {
-        await analytics.trackLinkOpen(url, userId: userId)
+    public func trackLinkOpen(_ url: String, deferred: Bool = false) async {
+        await analytics.trackLinkOpen(url, userId: userId, deferred: deferred)
     }
 
     /// Flush all queued analytics and ecommerce events to the server immediately.

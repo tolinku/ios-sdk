@@ -181,7 +181,7 @@ public final class Analytics: Sendable {
     ///
     /// Never throws. This runs on the path that routes the user somewhere, and a
     /// tap that goes unrecorded is not worth interrupting that.
-    public func trackLinkOpen(_ url: String, userId: String? = nil) async {
+    public func trackLinkOpen(_ url: String, userId: String? = nil, deferred: Bool = false) async {
         if await appOpens.disabled { return }
 
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -199,10 +199,18 @@ public final class Analytics: Sendable {
             // lands in a blank bucket on every breakdown.
             let platform: String
             let userId: String?
+            /// Whether this open followed a deferred install.
+            ///
+            /// Only the app knows. An ordinary open is somebody who already had
+            /// the app, and can never convert to an install; an open after a
+            /// deferred claim is the last stage of the install funnel. The
+            /// server records them as different events and must not pool them.
+            let deferred: Bool
             enum CodingKeys: String, CodingKey {
                 case url
                 case platform
                 case userId = "user_id"
+                case deferred
             }
         }
         struct Reply: Decodable {
@@ -212,7 +220,7 @@ public final class Analytics: Sendable {
         do {
             let reply: Reply = try await client.post(
                 path: "/v1/api/opens",
-                body: Body(url: trimmed, platform: "ios", userId: userId),
+                body: Body(url: trimmed, platform: "ios", userId: userId, deferred: deferred),
                 authenticated: false
             )
             // Remembering a no means the setting costs one request a launch
