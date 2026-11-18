@@ -190,7 +190,7 @@ public final class Analytics: Sendable {
               let scheme = parsed.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else { return }
 
-        if await appOpens.shouldSkip(trimmed) { return }
+        if await appOpens.shouldSkip(trimmed, deferred: deferred) { return }
 
         struct Body: Encodable {
             let url: String
@@ -327,6 +327,7 @@ actor AppOpenState {
 
     private var lastUrl: String?
     private var lastAt: Date?
+    private var lastDeferred = false
     private static let dedupeWindow: TimeInterval = 5
 
     /// Whether this link was already reported a moment ago.
@@ -335,12 +336,22 @@ actor AppOpenState {
     /// the app is wired, so an app instrumenting both would otherwise report it
     /// twice and be billed twice. A genuine second tap of the same link inside
     /// this window is implausible; a duplicate delivery of one tap is not.
-    func shouldSkip(_ url: String, now: Date = Date()) -> Bool {
-        if lastUrl == url, let at = lastAt, now.timeIntervalSince(at) < Self.dedupeWindow {
+    ///
+    /// The deferred flag is part of the key. An ordinary open and a deferred one
+    /// are different events on the server and only the app can tell them apart,
+    /// so a deferred report just after an ordinary one for the same link is new
+    /// information rather than a repeat. Keyed on the URL alone, somebody who
+    /// tapped a link, installed, then tapped it again would have the deferred
+    /// report swallowed, losing the last stage of the install funnel in the one
+    /// case it exists to show.
+    func shouldSkip(_ url: String, deferred: Bool = false, now: Date = Date()) -> Bool {
+        if lastUrl == url, lastDeferred == deferred, let at = lastAt,
+           now.timeIntervalSince(at) < Self.dedupeWindow {
             return true
         }
         lastUrl = url
         lastAt = now
+        lastDeferred = deferred
         return false
     }
 }
