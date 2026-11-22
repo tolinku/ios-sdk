@@ -197,7 +197,7 @@ everything rather than guessing which kind you have. It never throws: a link it
 cannot resolve is one to fall back to your own handling for.
 
 ```swift
-if let link = await Tolinku.shared.links.resolve(url) {
+if let link = await Tolinku.shared?.links.resolve(url) {
     // link.deepLinkPath -> "/order/4821/receipt"
     // link.token        -> "4821"
     // link.route.prefix -> "order/{token}/receipt"
