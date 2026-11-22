@@ -92,6 +92,33 @@ final class Client: Sendable {
         try await performVoidWithRetry(request)
     }
 
+    /// Send one POST, with no retries and its own time limit, and hand back
+    /// whatever came back, whatever the status.
+    ///
+    /// For a request whose caller has to read the answer itself rather than
+    /// have every non-2xx turned into the same error, and where asking twice
+    /// is worse than not asking: a link resolved for an email click is counted
+    /// as a click by the server, so a retry would count it again.
+    ///
+    /// - Parameters:
+    ///   - timeout: Seconds, set as the request's `timeoutInterval`.
+    /// - Throws: ``TolinkuError/networkError(_:)`` for a URLError (a timeout
+    ///   among them), or ``TolinkuError/invalidResponse`` for a non-HTTP one.
+    func postOnce<B: Encodable>(
+        path: String,
+        body: B,
+        authenticated: Bool,
+        origin: String? = nil,
+        timeout: TimeInterval
+    ) async throws -> (Data, HTTPURLResponse) {
+        var request = try buildRequest(method: "POST", path: path, authenticated: authenticated, origin: origin)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        request.timeoutInterval = timeout
+        let (data, response, _) = try await executeRaw(request)
+        return (data, response)
+    }
+
     // MARK: - Internal
 
     private func buildRequest(

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2
+
+### Changed
+
+- Links.resolve unwraps links from emails (SendGrid, Amazon SES, Braze, Klaviyo,
+  Iterable, Salesforce Marketing Cloud, Customer.io). It asks the link's own
+  host once, with a short time limit, and asks the Tolinku API only when that
+  host isn't Tolinku.
+
 ## 0.8.1
 
 ### Added

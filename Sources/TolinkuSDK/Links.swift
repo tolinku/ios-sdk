@@ -39,44 +39,165 @@ public final class Links: Sendable {
     /// platform knows which Appspace is being asked about, which also means a
     /// link on a domain that is not yours simply answers nothing.
     ///
+    /// The one exception is a link the host cannot answer for, which is what a
+    /// link in an email usually is: the email platform wraps every link in its
+    /// own click-tracking URL, on a domain that may not lead to Tolinku at all.
+    /// When the host gives no answer of Tolinku's own, the whole link goes to
+    /// Tolinku's API, with your key, and that unwraps it.
+    ///
+    /// Each question is asked once, with a 5 second limit, and never retried:
+    /// the server counts a resolved email link as a click, so asking again
+    /// would count it twice, and this runs while the app is opening.
+    ///
     /// Never throws. A link that cannot be resolved, for a bad network or any
     /// other reason, is one the app should fall back to its own handling for,
     /// and an error thrown in the middle of a cold start is no way to say so.
     public func resolve(_ url: URL) async -> ResolvedLink? {
-        // http and https only. A custom scheme link already carries the path the
-        // app wants, and anything else is not a link this could answer for.
-        guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
-              let host = url.host else { return nil }
+        guard let link = Self.normalise(url) else { return nil }
 
-        var origin = "\(scheme)://\(host)"
-        if let port = url.port { origin += ":\(port)" }
+        // The first question goes to the link's own host, without the key:
+        // that host was taken from the URL this was handed, and an app
+        // resolving a link from somewhere it does not control would otherwise
+        // send the Appspace's key to a stranger.
+        do {
+            let (data, response) = try await client.postOnce(
+                path: "/v1/api/path",
+                body: ["path": link.path, "url": link.whole],
+                authenticated: false,
+                origin: link.origin,
+                timeout: Self.timeout
+            )
+            if (200...299).contains(response.statusCode),
+               let resolved = Self.safe(data) {
+                return resolved
+            }
+            // An answer of Tolinku's own: the host is ours and has said what it
+            // has to say. Asking again would count the click twice.
+            if Self.isTolinkuReply(data) { return nil }
+        } catch {
+            // No answer at all (a bad network, a timeout). The next question
+            // is for exactly the host that could not answer.
+        }
 
-        // The percent-encoded path, not `url.path`, which decodes. A token may
-        // contain an encoded slash, and decoding first turns "/promo/a%2Fb"
-        // into a path three deep rather than a token of "a/b" on "promo",
-        // which resolves to a different route or to nothing.
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let rawPath = components?.percentEncodedPath ?? ""
-        let path = rawPath.isEmpty ? "/" : rawPath
+        return await resolveThroughAPI(link)
+    }
+
+    /// How long each question may take, in seconds.
+    static let timeout: TimeInterval = 5
+
+    /// A link in the one form every question about it uses.
+    struct NormalisedLink: Equatable {
+        /// `https://host[:port]`, where the first question goes.
+        let origin: String
+        /// The host alone, lowercased, without the port.
+        let host: String
+        /// The percent-encoded path, "/" when there is none.
+        let path: String
+        /// The origin, the path and the query: the link without its fragment.
+        let whole: String
+    }
+
+    /// The link, tidied the same way by every Tolinku SDK, or nil for anything
+    /// but an http or https link.
+    ///
+    /// The scheme and host are lowercased, http becomes https (every Tolinku
+    /// and click domain serves https, and App Transport Security blocks http
+    /// anyway), a default port and the fragment are dropped, and the path and
+    /// query are kept exactly as written.
+    ///
+    /// The path stays percent-encoded rather than going through `url.path`,
+    /// which decodes. A token may contain an encoded slash, and decoding first
+    /// turns "/promo/a%2Fb" into a path three deep rather than a token of "a/b"
+    /// on "promo", which resolves to a different route or to nothing.
+    static func normalise(_ url: URL) -> NormalisedLink? {
+        // http and https only. A custom scheme link already carries the path
+        // the app wants, and anything else is not a link this could answer for.
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              let encodedHost = components.percentEncodedHost, !encodedHost.isEmpty,
+              let host = components.host?.lowercased(), !host.isEmpty
+        else { return nil }
+
+        components.scheme = "https"
+        components.percentEncodedHost = encodedHost.lowercased()
+        components.user = nil
+        components.password = nil
+        if components.port == 443 || components.port == 80 {
+            components.port = nil
+        }
+        components.fragment = nil
+        if components.percentEncodedPath.isEmpty {
+            components.percentEncodedPath = "/"
+        }
+        // "?" with nothing after it is no query.
+        if components.percentEncodedQuery?.isEmpty == true {
+            components.percentEncodedQuery = nil
+        }
+        let path = components.percentEncodedPath
+
+        var bare = components
+        bare.percentEncodedPath = ""
+        bare.percentEncodedQuery = nil
+        guard let whole = components.string, let origin = bare.string else { return nil }
+
+        return NormalisedLink(origin: origin, host: host, path: path, whole: whole)
+    }
+
+    /// The second question, asked of Tolinku itself rather than of the link's
+    /// host.
+    ///
+    /// A wrapped email link lives on the email platform's click domain, which
+    /// may not point at Tolinku at all, so asking that host gets no answer of
+    /// Tolinku's. Tolinku's own API can still unwrap it and say which route it
+    /// leads to. This one goes to the configured base URL, never to a host
+    /// taken from the link, so sending the key with it is safe.
+    private func resolveThroughAPI(_ link: NormalisedLink) async -> ResolvedLink? {
+        // Without a key the API has no way to tell which Appspace is asking.
+        guard !client.apiKey.isEmpty else { return nil }
+        // Asking the same host twice gets the same answer twice. Hosts are
+        // compared lowercased and without their ports.
+        if let apiHost = URLComponents(string: client.baseURL)?.host?.lowercased(),
+           apiHost == link.host {
+            return nil
+        }
 
         do {
-            let resolved: ResolvedLink = try await client.post(
-                path: "/v1/api/path",
-                body: ["path": path],
-                authenticated: false,
-                origin: origin
+            let (data, response) = try await client.postOnce(
+                path: "/v1/api/links/resolve",
+                body: ["url": link.whole],
+                authenticated: true,
+                timeout: Self.timeout
             )
-            // The answer went to a host taken from the URL this was given, so an
-            // app resolving a link from somewhere it does not control is talking
-            // to a stranger. The contract is a path: a full URL, or a protocol
-            // relative "//host" that reads as one, is a redirect waiting to
-            // happen in whatever the app does next.
-            guard resolved.deepLinkPath.hasPrefix("/"),
-                  !resolved.deepLinkPath.hasPrefix("//") else { return nil }
-            return resolved
+            guard (200...299).contains(response.statusCode) else { return nil }
+            return Self.safe(data)
         } catch {
             return nil
         }
+    }
+
+    /// Whether a body is Tolinku's own way of saying no: a JSON object with a
+    /// string `error`, such as `{"error": "Route not found"}`.
+    static func isTolinkuReply(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        return object["error"] is String
+    }
+
+    /// The answer in this body, if there is one and its path is one an app can
+    /// safely route.
+    ///
+    /// The first answer came from a host taken from the URL this was given, so
+    /// an app resolving a link from somewhere it does not control is talking to
+    /// a stranger. The contract is a path: a full URL, or a protocol relative
+    /// "//host" that reads as one, is a redirect waiting to happen in whatever
+    /// the app does next. The API's answer is held to the same rule, since
+    /// what it hands back came out of a link someone else wrote.
+    private static func safe(_ data: Data) -> ResolvedLink? {
+        guard let resolved = try? JSONDecoder().decode(ResolvedLink.self, from: data),
+              resolved.deepLinkPath.hasPrefix("/"),
+              !resolved.deepLinkPath.hasPrefix("//") else { return nil }
+        return resolved
     }
 
     /// The same, for a link held as a string.
