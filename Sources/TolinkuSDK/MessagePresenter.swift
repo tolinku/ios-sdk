@@ -25,26 +25,17 @@ public final class TolinkuMessagePresenter: NSObject {
     /// Check whether a message has been dismissed and is still within its
     /// suppression window (based on `dismiss_days`).
     ///
+    /// A message with no `dismiss_days` (or 0) doesn't remember a close, so it
+    /// is never hidden by one; a number hides it for that many days.
+    ///
     /// - Parameter message: The message to check.
     /// - Returns: `true` if the message was dismissed recently enough to remain hidden.
     public static func isMessageDismissed(message: Message) -> Bool {
         let key = dismissedKeyPrefix + message.id
-        guard let dateString = UserDefaults.standard.string(forKey: key) else {
-            return false
+        let dismissedAt = UserDefaults.standard.string(forKey: key).flatMap {
+            ISO8601DateFormatter().date(from: $0)
         }
-        let formatter = ISO8601DateFormatter()
-        guard let dismissedDate = formatter.date(from: dateString) else {
-            return false
-        }
-        guard let dismissDays = message.dismissDays, dismissDays > 0 else {
-            // No dismiss_days means dismissed forever.
-            return true
-        }
-        let calendar = Calendar.current
-        guard let expiryDate = calendar.date(byAdding: .day, value: dismissDays, to: dismissedDate) else {
-            return false
-        }
-        return Date() < expiryDate
+        return MessageTiming.stillDismissed(dismissedAt: dismissedAt, dismissDays: message.dismissDays)
     }
 
     /// Record the current date as the dismissal timestamp for a message.
@@ -213,22 +204,44 @@ private final class MessageViewController: UIViewController, WKScriptMessageHand
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
-        // Native close button overlaid on the top-right corner.
-        closeButton = UIButton(type: .system)
+        // Native close button overlaid on the top-right corner. A white X on
+        // a dark disc, because it sits over the message itself and a message
+        // can be any colour: the white mark it used to be vanished on a white
+        // one, which is the default. The button is 44pt, Apple's minimum tap
+        // target; the disc drawn inside it is 32pt.
+        closeButton = UIButton(type: .custom)
         closeButton.translatesAutoresizingMaskIntoConstraints = false
-        let xImage = UIImage(systemName: "xmark.circle.fill")
-        closeButton.setImage(xImage, for: .normal)
-        closeButton.tintColor = UIColor.white.withAlphaComponent(0.9)
-        closeButton.contentVerticalAlignment = .fill
-        closeButton.contentHorizontalAlignment = .fill
+        closeButton.accessibilityLabel = "Close"
         closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+
+        let disc = UIView()
+        disc.translatesAutoresizingMaskIntoConstraints = false
+        disc.isUserInteractionEnabled = false
+        disc.backgroundColor = UIColor.black.withAlphaComponent(0.45)
+        disc.layer.cornerRadius = 16
+        closeButton.addSubview(disc)
+
+        let xView = UIImageView(image: UIImage(
+            systemName: "xmark",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)
+        ))
+        xView.translatesAutoresizingMaskIntoConstraints = false
+        xView.tintColor = .white
+        xView.isUserInteractionEnabled = false
+        disc.addSubview(xView)
         view.addSubview(closeButton)
 
         NSLayoutConstraint.activate([
-            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-            closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            closeButton.widthAnchor.constraint(equalToConstant: 32),
-            closeButton.heightAnchor.constraint(equalToConstant: 32),
+            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
+            closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
+            closeButton.widthAnchor.constraint(equalToConstant: 44),
+            closeButton.heightAnchor.constraint(equalToConstant: 44),
+            disc.centerXAnchor.constraint(equalTo: closeButton.centerXAnchor),
+            disc.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            disc.widthAnchor.constraint(equalToConstant: 32),
+            disc.heightAnchor.constraint(equalToConstant: 32),
+            xView.centerXAnchor.constraint(equalTo: disc.centerXAnchor),
+            xView.centerYAnchor.constraint(equalTo: disc.centerYAnchor),
         ])
 
         loadRenderedHTML()

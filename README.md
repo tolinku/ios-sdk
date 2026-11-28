@@ -162,6 +162,9 @@ Display server-configured messages as modal overlays using `TolinkuMessagePresen
 // Show the highest-priority message matching a trigger
 await tolinku.messages.show(trigger: "milestone", from: viewController)
 
+// Only messages for one event or milestone (plus those that name none)
+await tolinku.messages.show(trigger: "event", triggerValue: "purchase", from: viewController)
+
 // With action and dismiss callbacks
 await tolinku.messages.show(
     trigger: "milestone",
@@ -277,9 +280,9 @@ await Tolinku.shutdown()
 
 | Method | Description |
 |--------|-------------|
-| `fetch(trigger:)` | Fetch messages with optional trigger filter |
+| `fetch(trigger:triggerValue:)` | Fetch messages with optional trigger and event or milestone name |
 | `renderToken(messageId:)` | Get a render token for a message |
-| `show(trigger:from:onAction:onDismiss:)` | Show the highest-priority message |
+| `show(trigger:triggerValue:from:onAction:onDismiss:)` | Show the highest-priority message |
 
 ## Privacy
 

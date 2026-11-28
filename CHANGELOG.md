@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.8.3
+
+### Added
+
+- `triggerValue` on `messages.show(trigger:triggerValue:from:onAction:onDismiss:)`
+  and `messages.fetch(trigger:triggerValue:)`, to ask for the messages of one
+  event or milestone, such as `show(trigger: "event", triggerValue: "purchase",
+  from: vc)`. It is sent as `trigger_value`, and the SDK also filters by it, so
+  a server older than that parameter gives the same answer: messages for that
+  name, plus messages of the trigger that name none. Both default to nil, so
+  existing calls are unchanged.
+
+### Fixed
+
+- The close mark is visible on any message. It was a white mark over the
+  message itself, and a message is white unless the author picks a colour, so on
+  most messages it couldn't be seen. It is now a white X on a dark disc, with a
+  44pt tap area.
+- A message with "After closing, hide for" left empty no longer stays hidden
+  forever after one close. With no number the close isn't remembered and the
+  message can show again the next time the app asks; a number hides it for that
+  many days. This is what the web SDK and the docs already did.
+
 ## 0.8.2
 
 ### Changed
