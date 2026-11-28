@@ -46,8 +46,9 @@ public final class Links: Sendable {
     /// Tolinku's API, with your key, and that unwraps it.
     ///
     /// Each question is asked once, with a 5 second limit, and never retried:
-    /// the server counts a resolved email link as a click, so asking again
-    /// would count it twice, and this runs while the app is opening.
+    /// the server unwraps an email link once, which is how the email platform
+    /// counts the click (Tolinku records no click of its own), so asking again
+    /// could count it twice, and this runs while the app is opening.
     ///
     /// Never throws. A link that cannot be resolved, for a bad network or any
     /// other reason, is one the app should fall back to its own handling for,
@@ -72,8 +73,8 @@ public final class Links: Sendable {
                 return resolved
             }
             // An answer of Tolinku's own: the host is ours and has said what it
-            // has to say. Asking again would count the click twice.
-            if Self.isTolinkuReply(data) { return nil }
+            // has to say, so asking again would only repeat the question.
+            if isTolinkuReply(data, response, host: link.host) { return nil }
         } catch {
             // No answer at all (a bad network, a timeout). The next question
             // is for exactly the host that could not answer.
@@ -175,13 +176,25 @@ public final class Links: Sendable {
         }
     }
 
-    /// Whether a body is Tolinku's own way of saying no: a JSON object with a
-    /// string `error`, such as `{"error": "Route not found"}`.
-    static func isTolinkuReply(_ data: Data) -> Bool {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return false
-        }
-        return object["error"] is String
+    /// Whether a reply is Tolinku's own: marked `X-Tolinku: 1`, which every
+    /// answer of its API carries, or, from a server that predates the header,
+    /// a JSON object with a string `error` (`{"error": "Route not found"}`)
+    /// that came from Tolinku's own domain. An email platform's host can answer
+    /// in JSON with an `error` too, so the body alone proves nothing.
+    func isTolinkuReply(_ data: Data, _ response: HTTPURLResponse, host: String) -> Bool {
+        if response.value(forHTTPHeaderField: "X-Tolinku") == "1" { return true }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["error"] is String else { return false }
+        return isTolinkuDomain(host)
+    }
+
+    /// Whether a host is Tolinku's own: the configured API's host, or a host
+    /// under its parent domain (an Appspace's tolinku.com subdomain).
+    private func isTolinkuDomain(_ host: String) -> Bool {
+        guard let apiHost = URLComponents(string: client.baseURL)?.host?.lowercased() else { return false }
+        if host == apiHost { return true }
+        let labels = apiHost.split(separator: ".")
+        return labels.count > 2 && host.hasSuffix("." + labels.suffix(2).joined(separator: "."))
     }
 
     /// The answer in this body, if there is one and its path is one an app can

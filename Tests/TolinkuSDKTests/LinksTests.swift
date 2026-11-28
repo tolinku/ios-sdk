@@ -211,7 +211,8 @@ final class LinksTests: XCTestCase {
     /// network failure.
     private func respond(
         host: @escaping (URLRequest) throws -> (Int, String),
-        api: @escaping (URLRequest) throws -> (Int, String)
+        api: @escaping (URLRequest) throws -> (Int, String),
+        hostMarkedAsTolinku: Bool = false
     ) {
         MockURLProtocol.requestHandler = { request in
             let isAPI = request.url?.path == "/v1/api/links/resolve"
@@ -220,7 +221,9 @@ final class LinksTests: XCTestCase {
                 url: request.url!,
                 statusCode: status,
                 httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
+                headerFields: hostMarkedAsTolinku && !isAPI
+                    ? ["Content-Type": "application/json", "X-Tolinku": "1"]
+                    : ["Content-Type": "application/json"]
             )!
             return (response, body.data(using: .utf8))
         }
@@ -343,10 +346,14 @@ final class LinksTests: XCTestCase {
         XCTAssertEqual(MockURLProtocol.requestLog.count, 2)
     }
 
-    /// The host is Tolinku and has answered. Asking the API too would count
-    /// the email click twice.
+    /// The host is Tolinku (it says so with X-Tolinku: 1) and has answered.
+    /// Asking the API too would only repeat the question.
     private func assertNoFallback(afterHostSays body: String, status: Int) async {
-        respond(host: { _ in (status, body) }, api: { [answer = self.answer] _ in (200, answer) })
+        respond(
+            host: { _ in (status, body) },
+            api: { [answer = self.answer] _ in (200, answer) },
+            hostMarkedAsTolinku: true
+        )
 
         let link = await links.resolve("https://trk.example.com/c/abc123")
 
@@ -368,6 +375,37 @@ final class LinksTests: XCTestCase {
 
     func testATolinkuErrorWithAnyStatusStopsThere() async {
         await assertNoFallback(afterHostSays: #"{"error": "Internal error"}"#, status: 500)
+    }
+
+    func testAMarkedReplyStopsThereEvenWithoutAnErrorField() async {
+        await assertNoFallback(afterHostSays: #"{"message": "no"}"#, status: 404)
+    }
+
+    func testAnUnmarkedErrorStopsThereOnTolinkusOwnDomain() async {
+        // A server from before the header. The configured API is
+        // somewhere-else.example.com, so a link on example.com's subdomain is
+        // on the same parent domain.
+        respond(
+            host: { _ in (404, #"{"error": "Route not found"}"#) },
+            api: { [answer = self.answer] _ in (200, answer) }
+        )
+
+        let link = await links.resolve("https://links.example.com/s7k2p9q/4821")
+
+        XCTAssertNil(link)
+        XCTAssertEqual(MockURLProtocol.requestLog.count, 1)
+    }
+
+    func testAnEmailPlatformsJSONErrorDoesNotStopTheUnwrap() async {
+        respond(
+            host: { _ in (404, #"{"error": "Link not found"}"#) },
+            api: { [answer = self.answer] _ in (200, answer) }
+        )
+
+        let link = await links.resolve("https://trk.mailer.net/c/abc123")
+
+        XCTAssertNotNil(link)
+        XCTAssertEqual(MockURLProtocol.requestLog.count, 2)
     }
 
     func testNeverRetriesEitherQuestion() async {

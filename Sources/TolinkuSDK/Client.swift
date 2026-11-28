@@ -97,8 +97,10 @@ final class Client: Sendable {
     ///
     /// For a request whose caller has to read the answer itself rather than
     /// have every non-2xx turned into the same error, and where asking twice
-    /// is worse than not asking: a link resolved for an email click is counted
-    /// as a click by the server, so a retry would count it again.
+    /// is worse than not asking: resolving an email link makes the server request
+    /// the email platform's tracked link once, which is how that platform counts
+    /// the click (Tolinku records no click of its own), so a retry could count
+    /// it again.
     ///
     /// - Parameters:
     ///   - timeout: Seconds, set as the request's `timeoutInterval`.
